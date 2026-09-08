@@ -1,0 +1,66 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0a0a12;
+  font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  color: #eee;
+}
+
+#wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  gap: 10px;
+  padding: 12px;
+}
+
+h1.brand {
+  font-size: 1.15rem;
+  letter-spacing: 0.4em;
+  color: #c9a227;
+  font-weight: 700;
+  text-shadow: 0 0 14px rgba(201, 162, 39, 0.4);
+}
+
+#game {
+  display: block;
+  background: #111;
+  border: 2px solid #3a3428;
+  box-shadow:
+    0 0 0 1px #1a1814,
+    0 12px 40px rgba(0, 0, 0, 0.55),
+    inset 0 0 60px rgba(0, 0, 0, 0.25);
+  max-width: 100%;
+  height: auto;
+  image-rendering: auto;
+  cursor: default;
+}
+
+.hint {
+  font-size: 0.78rem;
+  color: #8a8578;
+  text-align: center;
+  line-height: 1.6;
+  max-width: 960px;
+}
+
+.hint kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  margin: 0 1px;
+  border: 1px solid #4a4538;
+  border-radius: 3px;
+  background: #1c1a16;
+  color: #d4c4a0;
+  font-size: 0.72rem;
+  font-family: inherit;
+}
