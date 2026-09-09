@@ -300,14 +300,22 @@ export function createPlay(opts) {
       waiting: false,
       bumps: b.bumps || null,
       packScore: b.packScore || 900,
+      onClear: b.onClear || null,
+      airborne: !!b.airborne,
     };
     // compat stage1 bumpsForPuppet
     if (!enemy.bumps && b.bumpsForPuppet) {
       enemy.bumps = { count: b.bumpsForPuppet, flag: 'has_puppet', item: 'puppet', msg: '撞×2 · 傀儡' };
     }
     const need = enemy.bumps ? enemy.bumps.count : 0;
-    teachMsg = need ? `${b.name} · 撞×${need}` : `${b.name}`;
-    setMsg(teachMsg, 2.2);
+    teachMsg = need
+      ? `${b.name} · 撞×${need}`
+      : b.airborne
+        ? `${b.name}（飞行）`
+        : b.onClear
+          ? `${b.name} · 败可得神兵`
+          : `${b.name}`;
+    setMsg(b.note || teachMsg, 2.2);
     bumpCount = 0;
   }
 
@@ -733,10 +741,10 @@ export function createPlay(opts) {
       addScoreTo(killer, pack);
     }
     for (const d of dropFromBoss()) applyDrop(d, enemy.x + (Math.random() * 20 - 10));
+    if (enemy.onClear) applyBossClear(enemy.onClear);
     const bl = bossesList();
     if (bossIdx + 1 < bl.length) {
       setMsg(`${enemy.name}败 · 下一Boss`, 1.5);
-      // brief delay via waiting flag
       enemy.waiting = true;
       enemy._nextBossAt = t + 1.0;
       enemy._nextBossIdx = bossIdx + 1;
@@ -744,6 +752,20 @@ export function createPlay(opts) {
       stageClearReady = true;
       setMsg(`${enemy.name}败 · 过关`, 2);
     }
+  }
+
+  function applyBossClear(oc) {
+    if (!oc) return;
+    if (oc.flags && p.runFlags) {
+      for (const f of oc.flags) p.runFlags[f] = true;
+    }
+    if (oc.swordId) {
+      for (const f of livingFighters()) {
+        addBagItemTo(f, oc.swordId, 1);
+        if (f.runFlags) applySwordFlag(f.runFlags, oc.swordId);
+      }
+    }
+    if (oc.msg) setMsg(oc.msg, 2.2);
   }
 
   function onGruntDead(g, killer = p) {
@@ -1292,7 +1314,7 @@ export function createPlay(opts) {
 
     drawText(
       ctx,
-      '关4 · 先左灯后右灯 · 撞吕蒙×3',
+      '关5八阵 · 破阵可重试 · 吕布掉干将',
       W / 2,
       212,
       6,
@@ -1358,7 +1380,15 @@ export function createPlay(opts) {
     if (enemy.alive && enemy.isBoss) {
       const bw = 160;
       const bx = (W - bw) / 2;
-      drawText(ctx, enemy.name, W / 2, 4, 7, '#e0b0b0', 'center');
+      drawText(
+        ctx,
+        enemy.airborne ? `${enemy.name} ✈` : enemy.name,
+        W / 2,
+        4,
+        7,
+        '#e0b0b0',
+        'center',
+      );
       ctx.fillStyle = '#301818';
       ctx.fillRect(bx, 14, bw, 8);
       ctx.fillStyle = '#d04040';

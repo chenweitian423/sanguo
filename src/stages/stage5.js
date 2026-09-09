@@ -1,0 +1,110 @@
+/** SAN-17 · 关5 智破八阵 — 沙摩柯→破阵（可重试）→吕布→陆逊→左慈；干将+和氏璧 */
+
+export const STAGE5 = {
+  id: 5,
+  worldW: 1500,
+  name: '智破八阵图',
+  blurb: '沙摩柯→吕布→陆逊→左慈',
+  waves: [
+    {
+      id: 'burn',
+      teach: '燃烧林 · 可上缺口进密',
+      grunts: [
+        { x: 240, hp: 20 },
+        { x: 280, hp: 20 },
+        { x: 320, hp: 20 },
+      ],
+      chest: { x: 220 },
+    },
+    {
+      id: 'form1',
+      teach: '破阵波1/3（失败可重试·宽松）',
+      grunts: [
+        { x: 400, hp: 18 },
+        { x: 440, hp: 18 },
+        { x: 480, hp: 18 },
+        { x: 520, hp: 18 },
+      ],
+    },
+    {
+      id: 'form2',
+      teach: '破阵波2/3',
+      grunts: [
+        { x: 460, hp: 20 },
+        { x: 500, hp: 20 },
+        { x: 540, hp: 20 },
+        { x: 580, hp: 20 },
+      ],
+    },
+    {
+      id: 'form3',
+      teach: '破阵波3/3 · 其后吕布',
+      grunts: [
+        { x: 520, hp: 22 },
+        { x: 560, hp: 22 },
+        { x: 600, hp: 22 },
+        { x: 640, hp: 22 },
+        { x: 680, hp: 22 },
+      ],
+    },
+  ],
+  vaults: [
+    {
+      id: 'grove',
+      type: 'door',
+      x: 300,
+      y: 156,
+      r: 24,
+      label: '竹林密',
+      setInside: 'grove',
+      grantBag: 'tianshi',
+      note: '竹林密室',
+    },
+  ],
+  bosses: [
+    {
+      id: 'shamoke',
+      name: '沙摩柯',
+      hp: 160,
+      x: 900,
+      y: 148,
+      weak: ['冰'],
+      packScore: 28000,
+      note: '半血可撤（原型：打完即过）',
+    },
+    {
+      id: 'lubu',
+      name: '吕布',
+      hp: 220,
+      x: 1050,
+      y: 148,
+      weak: ['火'],
+      packScore: 45000,
+      onClear: {
+        flags: ['has_thunder', 'has_heshi'],
+        swordId: 'sword_thunder',
+        msg: '吕布败 · 干将+和氏璧',
+      },
+    },
+    {
+      id: 'luxun',
+      name: '陆逊',
+      hp: 150,
+      x: 1180,
+      y: 148,
+      weak: [],
+      packScore: 24000,
+    },
+    {
+      id: 'zuoci',
+      name: '左慈',
+      hp: 180,
+      x: 1300,
+      y: 148,
+      weak: ['火'],
+      packScore: 30000,
+      airborne: true,
+      note: '飞行难普连 · 火剑/人遁克',
+    },
+  ],
+};

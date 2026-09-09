@@ -296,8 +296,8 @@ function clearStage() {
     if (!g.runFlags.has_jiujiezhang) g.runFlags.has_jiujiezhang = true;
   }
   if (st === 5) {
-    g.runFlags.has_thunder = true;
-    g.runFlags.has_heshi = true;
+    if (!g.runFlags.has_thunder) g.runFlags.has_thunder = true;
+    if (!g.runFlags.has_heshi) g.runFlags.has_heshi = true;
   }
   if (st === 6) {
     const g6 = Gates.enterBoomVault(g.runFlags);
@@ -393,7 +393,7 @@ function drawTitle(dt) {
       color: '#c0a878',
     });
   }
-  text('Tab 键位 · SAN-16 关4荆州', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
+  text('Tab 键位 · SAN-17 关5八阵', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
 }
 
 function drawSettings() {
