@@ -13,6 +13,7 @@ import {
   BOSS_WEAK,
 } from './leveling.js';
 import { COOP, isTwoPlayer, scaleEnemyHp, scaleDropQty, trailingScrollX, clampPlayerX } from './coop.js';
+import { stageScript } from './stages/index.js';
 
 /**
  * @param {{ W: number, H: number }} opts
@@ -69,6 +70,17 @@ export function createPlay(opts) {
   /** @type {any[]} */
   let moneys = [];
   let scrollX = 0;
+  let worldW = COOP.worldW;
+  let stageId = 0;
+  let script = null;
+  let waveIdx = 0;
+  let vaultHold = 0;
+  let vaultDone = false;
+  let props = [];
+  let bumpCount = 0;
+  let bumpCd = 0;
+  let stageClearReady = false;
+  let teachMsg = '';
   let playerCount = 1;
   /** @type {any|null} */
   let p2 = null;
@@ -117,7 +129,7 @@ export function createPlay(opts) {
     p.motionBuf = [];
     p.specialName = '';
     p.specialT = 0;
-    enemy = spawnEnemy(true);
+    enemy = { x: 0, y: 148, hp: 0, hpMax: 1, alive: false, hitFlash: 0, stunT: 0, isBoss: false, name: '', weak: [] };
     if (p.runFlags) {
       const map = [
         ['has_fire', 'sword_fire'],
@@ -136,37 +148,149 @@ export function createPlay(opts) {
 
     playerCount = opts.playerCount || 1;
     const charId2 = opts.charId2 || 'zhangfei';
-
+    stageId = opts.stageId || 1;
+    script = stageScript(stageId);
+    worldW = script ? script.worldW : COOP.worldW;
+    waveIdx = 0;
+    vaultHold = 0;
+    vaultDone = !!(p.runFlags && p.runFlags.has_fire_book);
+    bumpCount = 0;
+    bumpCd = 0;
+    stageClearReady = false;
+    teachMsg = '';
     groundHeals = [];
-    const gHp = scaleEnemyHp(18, playerCount);
-    grunts = [
-      { x: 280, y: 148, hp: gHp, hpMax: gHp, alive: true, stunT: 0 },
-      { x: 340, y: 148, hp: gHp, hpMax: gHp, alive: true, stunT: 0 },
-      { x: 400, y: 148, hp: gHp, hpMax: gHp, alive: true, stunT: 0 },
-      { x: 460, y: 148, hp: gHp, hpMax: gHp, alive: true, stunT: 0 },
-    ];
-    chests = [{ x: 200, y: 156, open: false }, { x: 520, y: 156, open: false }];
     moneys = [];
+    props = [];
+    chests = [];
+    grunts = [];
+
     p.score = p.score || 0;
     syncLevel(false);
     scrollX = 0;
-    // rescale boss for 2P
-    if (enemy) {
-      const bhp = scaleEnemyHp(enemy.hpMax, playerCount, { boss: true });
-      enemy.hpMax = bhp;
-      enemy.hp = bhp;
-      enemy.x = 560;
+
+    if (script && script.id === 1) {
+      loadStage1();
+    } else {
+      // fallback arena
+      enemy = spawnEnemy(true);
+      const gHp = scaleEnemyHp(18, playerCount);
+      grunts = [
+        { x: 280, y: 148, hp: gHp, hpMax: gHp, alive: true, stunT: 0 },
+        { x: 340, y: 148, hp: gHp, hpMax: gHp, alive: true, stunT: 0 },
+      ];
+      chests = [{ x: 200, y: 156, open: false }];
+      if (enemy) {
+        const bhp = scaleEnemyHp(enemy.hpMax, playerCount, { boss: true });
+        enemy.hpMax = bhp;
+        enemy.hp = bhp;
+        enemy.x = 560;
+      }
     }
+
     if (isTwoPlayer(playerCount)) {
       p2 = makeFighter(charId2, lives, 56);
-      p2.runFlags = p.runFlags; // shared
-      p2.score = 0;
+      p2.runFlags = p.runFlags;
+      p2.score = p2.score || 0;
       p2.level = 0;
       p2.itemTier = 1;
     } else {
       p2 = null;
     }
     t = 0;
+  }
+
+  function loadStage1() {
+    const s = script;
+    props = (s.props || []).map((pr) => ({
+      ...pr,
+      alive: true,
+      hpMax: pr.hp,
+    }));
+    enemy = {
+      x: s.boss.x,
+      y: s.boss.y,
+      hp: 1,
+      hpMax: 1,
+      hitFlash: 0,
+      stunT: 0,
+      alive: false, // spawn after waves
+      isBoss: true,
+      name: s.boss.name,
+      armorElem: s.boss.armorElem,
+      weak: s.boss.weak || [],
+      id: s.boss.id,
+      waiting: true,
+    };
+    spawnWave(0);
+  }
+
+  function spawnWave(idx) {
+    waveIdx = idx;
+    if (!script || !script.waves || idx >= script.waves.length) {
+      beginBoss();
+      return;
+    }
+    const w = script.waves[idx];
+    teachMsg = w.teach || '';
+    setMsg(teachMsg, 2.2);
+    grunts = (w.grunts || []).map((g) => {
+      const hp = scaleEnemyHp(g.hp || 16, playerCount);
+      return { x: g.x, y: 148, hp, hpMax: hp, alive: true, stunT: 0 };
+    });
+    if (w.chest) {
+      chests.push({ x: w.chest.x, y: 156, open: false });
+    }
+  }
+
+  function beginBoss() {
+    if (!script || !script.boss) return;
+    const b = script.boss;
+    const hp = scaleEnemyHp(b.hp, playerCount, { boss: true });
+    enemy = {
+      x: b.x,
+      y: b.y,
+      hp,
+      hpMax: hp,
+      hitFlash: 0,
+      stunT: 0,
+      alive: true,
+      isBoss: true,
+      name: b.name,
+      armorElem: b.armorElem,
+      weak: b.weak || [],
+      id: b.id,
+      waiting: false,
+    };
+    teachMsg = '孙姬 · 靠近攻击可撞；撞×2得傀儡';
+    setMsg(teachMsg, 2.5);
+    bumpCount = 0;
+  }
+
+  function waveCleared() {
+    return grunts.every((g) => !g.alive);
+  }
+
+  function grantFireBook() {
+    if (!script || !script.vault || vaultDone) return;
+    vaultDone = true;
+    if (p.runFlags) {
+      p.runFlags.has_fire_book = true;
+      Gates.enterFireBookVault();
+    }
+    const itemId = script.vault.bagItem;
+    for (const f of livingFighters()) {
+      addBagItemTo(f, itemId, 1);
+    }
+    setMsg('获得火书（人遁）· 单人站位OK', 2);
+  }
+
+  function grantPuppetFromBump() {
+    if (!p.runFlags || p.runFlags.has_puppet) return;
+    p.runFlags.has_puppet = true;
+    for (const f of livingFighters()) {
+      addBagItemTo(f, 'puppet', 1);
+    }
+    setMsg('撞×2 · 获得傀儡（定身）', 2);
   }
 
   function makeFighter(charId, lives, startX) {
@@ -408,6 +532,18 @@ export function createPlay(opts) {
         setMsg('开箱', 0.5);
       }
     }
+    for (const pr of props) {
+      if (!pr.alive) continue;
+      if (Math.abs(pr.x - attacker.x) < reach + 8 && Math.abs(pr.y - attacker.y) < 30) {
+        pr.hp -= dealt;
+        hit = true;
+        if (pr.hp <= 0) {
+          pr.alive = false;
+          if (pr.drop) addBagItemTo(attacker, pr.drop, 1);
+          setMsg(`破${pr.label}`, 0.6);
+        }
+      }
+    }
     if (hit) gainPipFromHitFor(attacker);
   }
 
@@ -434,7 +570,7 @@ export function createPlay(opts) {
   function onEnemyDead(killer = p) {
     enemy.alive = false;
     enemy.hp = 0;
-    const pack = 900;
+    const pack = (script && script.boss && script.boss.packScore) || 900;
     if (isTwoPlayer(playerCount)) {
       if (p.hp > 0) addScoreTo(p, pack);
       if (p2 && p2.hp > 0) addScoreTo(p2, pack);
@@ -442,7 +578,11 @@ export function createPlay(opts) {
       addScoreTo(killer, pack);
     }
     for (const d of dropFromBoss()) applyDrop(d, enemy.x + (Math.random() * 20 - 10));
-    setMsg(isTwoPlayer(playerCount) ? 'Boss倒 · 双人各拿包 · ENTER过关' : 'Boss倒 · 必掉加血 · ENTER过关', 2);
+    if (script && script.id === 1 && bumpCount < (script.boss.bumpsForPuppet || 2)) {
+      // still allow puppet if somehow skipped bumps
+    }
+    stageClearReady = true;
+    setMsg('孙姬败 · 过关', 2);
   }
 
   function onGruntDead(g, killer = p) {
@@ -560,7 +700,7 @@ export function createPlay(opts) {
       if (input.upTap) p.cursor = items.length ? (p.cursor + items.length - 1) % items.length : 0;
       if (input.downTap) p.cursor = items.length ? (p.cursor + 1) % items.length : 0;
       if (input.dTap || input.aTap) useSelected();
-      return { dead: p.hp <= 0 };
+      return { dead: p.hp <= 0 && (!p2 || p2.hp <= 0), stageClear: stageClearReady };
     }
 
     // motion buffer from directions
@@ -626,9 +766,9 @@ export function createPlay(opts) {
     }
 
     const xs = livingFighters().map((f) => f.x);
-    scrollX = trailingScrollX(xs.length ? xs : [p.x], W, COOP.worldW);
-    p.x = clampPlayerX(p.x, scrollX, W, COOP.worldW);
-    if (p2 && p2.hp > 0) p2.x = clampPlayerX(p2.x, scrollX, W, COOP.worldW);
+    scrollX = trailingScrollX(xs.length ? xs : [p.x], W, worldW);
+    p.x = clampPlayerX(p.x, scrollX, W, worldW);
+    if (p2 && p2.hp > 0) p2.x = clampPlayerX(p2.x, scrollX, W, worldW);
 
     pickupWorld(p);
     if (p2 && p2.hp > 0) pickupWorld(p2);
@@ -656,7 +796,67 @@ export function createPlay(opts) {
       }
     }
 
-    return { dead: p.hp <= 0 && (!p2 || p2.hp <= 0) };
+    tickStage(dt);
+
+    return {
+      dead: p.hp <= 0 && (!p2 || p2.hp <= 0),
+      stageClear: stageClearReady,
+    };
+  }
+
+  function tickStage(dt) {
+    if (!script || script.id !== 1) return;
+    if (bumpCd > 0) bumpCd -= dt;
+
+    // wave advance
+    if (enemy.waiting && waveCleared() && waveIdx < script.waves.length) {
+      // small beat then next
+      if (!tickStage._wait) tickStage._wait = 0.6;
+      tickStage._wait -= dt;
+      if (tickStage._wait <= 0) {
+        tickStage._wait = 0;
+        if (waveIdx + 1 >= script.waves.length) beginBoss();
+        else spawnWave(waveIdx + 1);
+      }
+    } else {
+      tickStage._wait = 0;
+    }
+
+    // fire-book vault stand (solo OK)
+    const v = script.vault;
+    if (v && !vaultDone) {
+      let standing = false;
+      for (const f of livingFighters()) {
+        if (Math.hypot(f.x - v.x, f.y + 20 - v.y) < v.r) {
+          standing = true;
+          break;
+        }
+      }
+      if (standing) {
+        vaultHold += dt;
+        if (vaultHold >= v.holdSec) grantFireBook();
+      } else {
+        vaultHold = Math.max(0, vaultHold - dt * 1.5);
+      }
+    }
+
+    // bump Sun Ji for puppet
+    if (enemy.alive && enemy.id === 'sunji' && bumpCd <= 0) {
+      const need = script.boss.bumpsForPuppet || 2;
+      for (const f of livingFighters()) {
+        const near = Math.abs(enemy.x - f.x) < 22 && Math.abs(enemy.y - f.y) < 20;
+        const attacking = f.atkT > 0;
+        const pressing = (f.facing > 0 && f.vx > 0) || (f.facing < 0 && f.vx < 0);
+        if (near && (attacking || pressing)) {
+          bumpCount += 1;
+          bumpCd = 0.55;
+          enemy.hitFlash = 0.2;
+          setMsg(`撞孙姬 ${bumpCount}/${need}`, 0.7);
+          if (bumpCount >= need) grantPuppetFromBump();
+          break;
+        }
+      }
+    }
   }
 
   function pickupWorld(fighter) {
@@ -739,6 +939,26 @@ export function createPlay(opts) {
   function draw(ctx, hud) {
     ctx.save();
     ctx.translate(-scrollX, 0);
+    // vault marker
+    if (script && script.vault && !vaultDone) {
+      const v = script.vault;
+      const pulse = 0.5 + 0.5 * Math.sin(t * 6);
+      ctx.strokeStyle = `rgba(240,160,80,${0.4 + pulse * 0.5})`;
+      ctx.beginPath();
+      ctx.arc(v.x, v.y - 8, v.r, 0, Math.PI * 2);
+      ctx.stroke();
+      drawText(ctx, '火书', v.x, v.y - 28, 6, '#f0a050', 'center');
+      if (vaultHold > 0) {
+        drawText(ctx, `${Math.min(1, vaultHold / v.holdSec) * 100 | 0}%`, v.x, v.y - 18, 6, '#ffe0a0', 'center');
+      }
+    }
+    // props
+    for (const pr of props) {
+      if (!pr.alive) continue;
+      ctx.fillStyle = '#406080';
+      ctx.fillRect(pr.x - 10, pr.y, 20, 14);
+      drawText(ctx, pr.label, pr.x, pr.y - 10, 6, '#80a0c0', 'center');
+    }
     // chests
     for (const c of chests) {
       ctx.fillStyle = c.open ? '#403020' : '#8a5a20';
@@ -822,7 +1042,7 @@ export function createPlay(opts) {
 
     drawText(
       ctx,
-      '1P：WASD+JKLI=ABCD · Tab改键 · 卷轴跟落后',
+      '关1截江 · 站位拿火书 · 撞孙姬×2傀儡',
       W / 2,
       212,
       6,
@@ -898,6 +1118,10 @@ export function createPlay(opts) {
     }
 
     drawText(ctx, hud.stageName, 8, H - 12, 6, '#8090a0');
+    if (teachMsg) drawText(ctx, teachMsg, W / 2, H - 12, 6, '#c0a878', 'center');
+    if (script && script.id === 1 && enemy.alive && enemy.id === 'sunji') {
+      drawText(ctx, `撞 ${bumpCount}/${script.boss.bumpsForPuppet}`, W / 2, 26, 7, '#e0b090', 'center');
+    }
     if (p.runFlags) drawText(ctx, flagStrip(p.runFlags), W - 8, H - 12, 5.5, '#a09070', 'right');
   }
 
@@ -963,6 +1187,14 @@ export function createPlay(opts) {
     },
     get playerCount() {
       return playerCount;
+    },
+    get stageClear() {
+      return stageClearReady;
+    },
+    consumeStageClear() {
+      const v = stageClearReady;
+      stageClearReady = false;
+      return v;
     },
     get lives() {
       return p.lives;
