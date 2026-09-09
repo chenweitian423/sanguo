@@ -74,11 +74,13 @@ export function createPlay(opts) {
   let stageId = 0;
   let script = null;
   let waveIdx = 0;
-  let vaultHold = 0;
-  let vaultDone = false;
+  let vaultHold = {};
+  let vaultDone = {};
+  let insideZone = null;
   let props = [];
   let bumpCount = 0;
   let bumpCd = 0;
+  let bossIdx = 0;
   let stageClearReady = false;
   let teachMsg = '';
   let playerCount = 1;
@@ -152,10 +154,12 @@ export function createPlay(opts) {
     script = stageScript(stageId);
     worldW = script ? script.worldW : COOP.worldW;
     waveIdx = 0;
-    vaultHold = 0;
-    vaultDone = !!(p.runFlags && p.runFlags.has_fire_book);
+    vaultHold = {};
+    vaultDone = {};
+    insideZone = null;
     bumpCount = 0;
     bumpCd = 0;
+    bossIdx = 0;
     stageClearReady = false;
     teachMsg = '';
     groundHeals = [];
@@ -168,10 +172,9 @@ export function createPlay(opts) {
     syncLevel(false);
     scrollX = 0;
 
-    if (script && script.id === 1) {
-      loadStage1();
+    if (script && (script.waves || script.bosses || script.boss)) {
+      loadStageScript();
     } else {
-      // fallback arena
       enemy = spawnEnemy(true);
       const gHp = scaleEnemyHp(18, playerCount);
       grunts = [
@@ -199,35 +202,60 @@ export function createPlay(opts) {
     t = 0;
   }
 
-  function loadStage1() {
+  function bossesList() {
+    if (!script) return [];
+    if (script.bosses) return script.bosses;
+    if (script.boss) return [script.boss];
+    return [];
+  }
+
+  function loadStageScript() {
     const s = script;
     props = (s.props || []).map((pr) => ({
       ...pr,
       alive: true,
       hpMax: pr.hp,
     }));
+    // seed vault chests
+    for (const v of s.vaults || []) {
+      if (v.type === 'chest_flag') {
+        chests.push({
+          x: v.x,
+          y: v.y || 156,
+          open: false,
+          vaultId: v.id,
+          requireInside: v.requireInside || null,
+          flag: v.flag,
+          swordId: v.swordId || null,
+        });
+      }
+    }
+    const bl = bossesList();
+    const placeholder = bl[0] || { x: 800, y: 148, name: 'Boss', id: 'boss', hp: 100, weak: [] };
     enemy = {
-      x: s.boss.x,
-      y: s.boss.y,
+      x: placeholder.x,
+      y: placeholder.y || 148,
       hp: 1,
       hpMax: 1,
       hitFlash: 0,
       stunT: 0,
-      alive: false, // spawn after waves
+      alive: false,
       isBoss: true,
-      name: s.boss.name,
-      armorElem: s.boss.armorElem,
-      weak: s.boss.weak || [],
-      id: s.boss.id,
+      name: placeholder.name,
+      armorElem: placeholder.armorElem || null,
+      weak: placeholder.weak || [],
+      id: placeholder.id,
       waiting: true,
     };
-    spawnWave(0);
+    bossIdx = 0;
+    if (s.waves && s.waves.length) spawnWave(0);
+    else beginBossAt(0);
   }
 
   function spawnWave(idx) {
     waveIdx = idx;
     if (!script || !script.waves || idx >= script.waves.length) {
-      beginBoss();
+      beginBossAt(0);
       return;
     }
     const w = script.waves[idx];
@@ -242,13 +270,18 @@ export function createPlay(opts) {
     }
   }
 
-  function beginBoss() {
-    if (!script || !script.boss) return;
-    const b = script.boss;
+  function beginBossAt(idx) {
+    const bl = bossesList();
+    if (!bl.length || idx >= bl.length) {
+      stageClearReady = true;
+      return;
+    }
+    bossIdx = idx;
+    const b = bl[idx];
     const hp = scaleEnemyHp(b.hp, playerCount, { boss: true });
     enemy = {
       x: b.x,
-      y: b.y,
+      y: b.y || 148,
       hp,
       hpMax: hp,
       hitFlash: 0,
@@ -256,41 +289,60 @@ export function createPlay(opts) {
       alive: true,
       isBoss: true,
       name: b.name,
-      armorElem: b.armorElem,
+      armorElem: b.armorElem || null,
       weak: b.weak || [],
       id: b.id,
       waiting: false,
+      bumps: b.bumps || null,
+      packScore: b.packScore || 900,
     };
-    teachMsg = '孙姬 · 靠近攻击可撞；撞×2得傀儡';
-    setMsg(teachMsg, 2.5);
+    // compat stage1 bumpsForPuppet
+    if (!enemy.bumps && b.bumpsForPuppet) {
+      enemy.bumps = { count: b.bumpsForPuppet, flag: 'has_puppet', item: 'puppet', msg: '撞×2 · 傀儡' };
+    }
+    const need = enemy.bumps ? enemy.bumps.count : 0;
+    teachMsg = need ? `${b.name} · 撞×${need}` : `${b.name}`;
+    setMsg(teachMsg, 2.2);
     bumpCount = 0;
   }
 
   function waveCleared() {
-    return grunts.every((g) => !g.alive);
+    return grunts.length === 0 || grunts.every((g) => !g.alive);
   }
 
-  function grantFireBook() {
-    if (!script || !script.vault || vaultDone) return;
-    vaultDone = true;
-    if (p.runFlags) {
-      p.runFlags.has_fire_book = true;
-      Gates.enterFireBookVault();
+  function grantVault(v) {
+    if (!v || vaultDone[v.id]) return;
+    vaultDone[v.id] = true;
+    if (v.flag && p.runFlags) {
+      p.runFlags[v.flag] = true;
+      if (v.flag === 'has_fire_book') Gates.enterFireBookVault();
+      if (v.flag === 'has_fire') Gates.enterFireSwordVault();
     }
-    const itemId = script.vault.bagItem;
-    for (const f of livingFighters()) {
-      addBagItemTo(f, itemId, 1);
+    if (v.swordId) {
+      for (const f of livingFighters()) {
+        addBagItemTo(f, v.swordId, 1);
+        if (f.runFlags) applySwordFlag(f.runFlags, v.swordId);
+      }
     }
-    setMsg('获得火书（人遁）· 单人站位OK', 2);
+    if (v.bagItem) {
+      for (const f of livingFighters()) addBagItemTo(f, v.bagItem, 1);
+    }
+    if (v.grantBag) {
+      for (const f of livingFighters()) addBagItemTo(f, v.grantBag, 1);
+    }
+    setMsg(v.label ? `获得 · ${v.label}` : '密室收获', 1.6);
   }
 
-  function grantPuppetFromBump() {
-    if (!p.runFlags || p.runFlags.has_puppet) return;
-    p.runFlags.has_puppet = true;
-    for (const f of livingFighters()) {
-      addBagItemTo(f, 'puppet', 1);
+  function grantBumpReward(bumps) {
+    if (!bumps) return;
+    if (bumps.flag && p.runFlags) {
+      if (p.runFlags[bumps.flag]) return;
+      p.runFlags[bumps.flag] = true;
     }
-    setMsg('撞×2 · 获得傀儡（定身）', 2);
+    if (bumps.item) {
+      for (const f of livingFighters()) addBagItemTo(f, bumps.item, 1);
+    }
+    setMsg(bumps.msg || '撞技奖励', 1.8);
   }
 
   function makeFighter(charId, lives, startX) {
@@ -525,11 +577,22 @@ export function createPlay(opts) {
     }
     for (const c of chests) {
       if (c.open) continue;
+      if (c.requireInside && insideZone !== c.requireInside) continue;
       if (Math.abs(c.x - attacker.x) < reach && Math.abs(c.y - attacker.y) < 30) {
         c.open = true;
-        applyDrop(dropFromChest(), c.x);
+        if (c.swordId || c.flag) {
+          if (c.flag && p.runFlags) p.runFlags[c.flag] = true;
+          if (c.swordId) {
+            addBagItemTo(attacker, c.swordId, 1);
+            if (p.runFlags) applySwordFlag(p.runFlags, c.swordId);
+          }
+          if (c.vaultId) vaultDone[c.vaultId] = true;
+          setMsg('开箱 · 神兵', 1);
+        } else {
+          applyDrop(dropFromChest(), c.x);
+          setMsg('开箱', 0.5);
+        }
         hit = true;
-        setMsg('开箱', 0.5);
       }
     }
     for (const pr of props) {
@@ -570,7 +633,7 @@ export function createPlay(opts) {
   function onEnemyDead(killer = p) {
     enemy.alive = false;
     enemy.hp = 0;
-    const pack = (script && script.boss && script.boss.packScore) || 900;
+    const pack = enemy.packScore || (script && script.boss && script.boss.packScore) || 900;
     if (isTwoPlayer(playerCount)) {
       if (p.hp > 0) addScoreTo(p, pack);
       if (p2 && p2.hp > 0) addScoreTo(p2, pack);
@@ -578,11 +641,17 @@ export function createPlay(opts) {
       addScoreTo(killer, pack);
     }
     for (const d of dropFromBoss()) applyDrop(d, enemy.x + (Math.random() * 20 - 10));
-    if (script && script.id === 1 && bumpCount < (script.boss.bumpsForPuppet || 2)) {
-      // still allow puppet if somehow skipped bumps
+    const bl = bossesList();
+    if (bossIdx + 1 < bl.length) {
+      setMsg(`${enemy.name}败 · 下一Boss`, 1.5);
+      // brief delay via waiting flag
+      enemy.waiting = true;
+      enemy._nextBossAt = t + 1.0;
+      enemy._nextBossIdx = bossIdx + 1;
+    } else {
+      stageClearReady = true;
+      setMsg(`${enemy.name}败 · 过关`, 2);
     }
-    stageClearReady = true;
-    setMsg('孙姬败 · 过关', 2);
   }
 
   function onGruntDead(g, killer = p) {
@@ -775,10 +844,21 @@ export function createPlay(opts) {
 
     for (const c of chests) {
       if (c.open) continue;
+      if (c.requireInside && insideZone !== c.requireInside) continue;
       for (const f of livingFighters()) {
         if (Math.abs(c.x - f.x) < 12) {
           c.open = true;
-          applyDrop(dropFromChest(), c.x);
+          if (c.swordId || c.flag) {
+            if (c.flag && p.runFlags) p.runFlags[c.flag] = true;
+            if (c.swordId) {
+              addBagItemTo(f, c.swordId, 1);
+              if (p.runFlags) applySwordFlag(p.runFlags, c.swordId);
+            }
+            if (c.vaultId) vaultDone[c.vaultId] = true;
+            setMsg('开箱 · 神兵', 1);
+          } else {
+            applyDrop(dropFromChest(), c.x);
+          }
           break;
         }
       }
@@ -805,44 +885,79 @@ export function createPlay(opts) {
   }
 
   function tickStage(dt) {
-    if (!script || script.id !== 1) return;
+    if (!script) return;
     if (bumpCd > 0) bumpCd -= dt;
 
+    // delayed next boss
+    if (enemy && enemy._nextBossAt != null && t >= enemy._nextBossAt) {
+      const ni = enemy._nextBossIdx;
+      enemy._nextBossAt = null;
+      beginBossAt(ni);
+    }
+
     // wave advance
-    if (enemy.waiting && waveCleared() && waveIdx < script.waves.length) {
-      // small beat then next
-      if (!tickStage._wait) tickStage._wait = 0.6;
+    if (enemy.waiting && enemy._nextBossAt == null && waveCleared() && script.waves && waveIdx < script.waves.length) {
+      if (!tickStage._wait) tickStage._wait = 0.55;
       tickStage._wait -= dt;
       if (tickStage._wait <= 0) {
         tickStage._wait = 0;
-        if (waveIdx + 1 >= script.waves.length) beginBoss();
+        if (waveIdx + 1 >= script.waves.length) beginBossAt(0);
         else spawnWave(waveIdx + 1);
       }
-    } else {
+    } else if (!(enemy && enemy._nextBossAt != null)) {
       tickStage._wait = 0;
     }
 
-    // fire-book vault stand (solo OK)
-    const v = script.vault;
-    if (v && !vaultDone) {
-      let standing = false;
-      for (const f of livingFighters()) {
-        if (Math.hypot(f.x - v.x, f.y + 20 - v.y) < v.r) {
-          standing = true;
-          break;
+    // vaults
+    for (const v of script.vaults || []) {
+      if (vaultDone[v.id]) continue;
+      if (v.requireInside && insideZone !== v.requireInside) continue;
+
+      if (v.type === 'stand' || v.type === 'pillar') {
+        let standing = false;
+        for (const f of livingFighters()) {
+          const fy = v.type === 'stand' ? f.y + 20 : f.y;
+          if (Math.hypot(f.x - v.x, fy - (v.y || 156)) < (v.r || 22)) {
+            standing = true;
+            if (v.hurt && v.type === 'pillar') {
+              f.hp = Math.max(1, f.hp - v.hurt * dt);
+            }
+            break;
+          }
+        }
+        if (standing) {
+          vaultHold[v.id] = (vaultHold[v.id] || 0) + dt;
+          if (vaultHold[v.id] >= (v.holdSec || 0.8)) grantVault(v);
+        } else {
+          vaultHold[v.id] = Math.max(0, (vaultHold[v.id] || 0) - dt * 1.5);
         }
       }
-      if (standing) {
-        vaultHold += dt;
-        if (vaultHold >= v.holdSec) grantFireBook();
-      } else {
-        vaultHold = Math.max(0, vaultHold - dt * 1.5);
+
+      if (v.type === 'door') {
+        for (const f of livingFighters()) {
+          if (Math.abs(f.x - v.x) < (v.r || 24) && Math.abs(f.y - (v.y || 148)) < 30) {
+            if (v.setInside) {
+              insideZone = v.setInside;
+              if (v.flag === 'has_fire' || v.setInside === 'fire_sword') {
+                Gates.enterFireSwordVault();
+              }
+              setMsg(v.note || `进入 ${v.label || '密室'}`, 1.2);
+            }
+            if (v.grantBag || v.bagItem || v.flag) {
+              // wangping-style instant optional loot on enter once
+              grantVault(v);
+            } else if (v.setInside && !vaultDone[v.id]) {
+              vaultDone[v.id] = true; // mark door used
+            }
+            break;
+          }
+        }
       }
     }
 
-    // bump Sun Ji for puppet
-    if (enemy.alive && enemy.id === 'sunji' && bumpCd <= 0) {
-      const need = script.boss.bumpsForPuppet || 2;
+    // bumps on current boss
+    if (enemy.alive && enemy.bumps && bumpCd <= 0) {
+      const need = enemy.bumps.count || 2;
       for (const f of livingFighters()) {
         const near = Math.abs(enemy.x - f.x) < 22 && Math.abs(enemy.y - f.y) < 20;
         const attacking = f.atkT > 0;
@@ -851,8 +966,8 @@ export function createPlay(opts) {
           bumpCount += 1;
           bumpCd = 0.55;
           enemy.hitFlash = 0.2;
-          setMsg(`撞孙姬 ${bumpCount}/${need}`, 0.7);
-          if (bumpCount >= need) grantPuppetFromBump();
+          setMsg(`撞 ${bumpCount}/${need}`, 0.7);
+          if (bumpCount >= need) grantBumpReward(enemy.bumps);
           break;
         }
       }
@@ -939,18 +1054,31 @@ export function createPlay(opts) {
   function draw(ctx, hud) {
     ctx.save();
     ctx.translate(-scrollX, 0);
-    // vault marker
-    if (script && script.vault && !vaultDone) {
+    // vault markers
+    if (script && script.vaults) {
+      for (const v of script.vaults) {
+        if (vaultDone[v.id] && v.type !== 'door') continue;
+        if (v.requireInside && insideZone !== v.requireInside) continue;
+        if (v.type === 'chest_flag') continue; // drawn as chest
+        const pulse = 0.5 + 0.5 * Math.sin(t * 6);
+        const col = v.type === 'pillar' ? '240,80,60' : v.type === 'door' ? '120,180,220' : '240,160,80';
+        ctx.strokeStyle = `rgba(${col},${0.35 + pulse * 0.5})`;
+        ctx.beginPath();
+        ctx.arc(v.x, (v.y || 156) - 8, v.r || 22, 0, Math.PI * 2);
+        ctx.stroke();
+        drawText(ctx, (v.label || v.id).slice(0, 6), v.x, (v.y || 156) - 28, 6, '#f0c080', 'center');
+        const hold = vaultHold[v.id] || 0;
+        if (hold > 0 && v.holdSec) {
+          drawText(ctx, `${Math.min(1, hold / v.holdSec) * 100 | 0}%`, v.x, (v.y || 156) - 18, 6, '#ffe0a0', 'center');
+        }
+      }
+    } else if (script && script.vault && !vaultDone.fire_book) {
+      // legacy single vault
       const v = script.vault;
-      const pulse = 0.5 + 0.5 * Math.sin(t * 6);
-      ctx.strokeStyle = `rgba(240,160,80,${0.4 + pulse * 0.5})`;
+      ctx.strokeStyle = '#f0a050';
       ctx.beginPath();
       ctx.arc(v.x, v.y - 8, v.r, 0, Math.PI * 2);
       ctx.stroke();
-      drawText(ctx, '火书', v.x, v.y - 28, 6, '#f0a050', 'center');
-      if (vaultHold > 0) {
-        drawText(ctx, `${Math.min(1, vaultHold / v.holdSec) * 100 | 0}%`, v.x, v.y - 18, 6, '#ffe0a0', 'center');
-      }
     }
     // props
     for (const pr of props) {
@@ -1042,7 +1170,7 @@ export function createPlay(opts) {
 
     drawText(
       ctx,
-      '关1截江 · 站位拿火书 · 撞孙姬×2傀儡',
+      '关1–2 · 密室圈/门 · 多Boss撞技',
       W / 2,
       212,
       6,
@@ -1119,9 +1247,10 @@ export function createPlay(opts) {
 
     drawText(ctx, hud.stageName, 8, H - 12, 6, '#8090a0');
     if (teachMsg) drawText(ctx, teachMsg, W / 2, H - 12, 6, '#c0a878', 'center');
-    if (script && script.id === 1 && enemy.alive && enemy.id === 'sunji') {
-      drawText(ctx, `撞 ${bumpCount}/${script.boss.bumpsForPuppet}`, W / 2, 26, 7, '#e0b090', 'center');
+    if (enemy.alive && enemy.bumps) {
+      drawText(ctx, `撞 ${bumpCount}/${enemy.bumps.count}`, W / 2, 26, 7, '#e0b090', 'center');
     }
+    if (insideZone) drawText(ctx, `密室:${insideZone}`, 8, 72, 6, '#80a0c0');
     if (p.runFlags) drawText(ctx, flagStrip(p.runFlags), W - 8, H - 12, 5.5, '#a09070', 'right');
   }
 

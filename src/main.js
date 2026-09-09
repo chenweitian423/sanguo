@@ -282,9 +282,9 @@ function clearStage() {
     if (!g.runFlags.has_puppet) g.runFlags.has_puppet = true;
   }
   if (st === 2) {
-    g.runFlags.has_fire = true;
-    g.runFlags.has_nameless_fire = true;
-    g.runFlags.has_general_seal = true;
+    if (!g.runFlags.has_fire) g.runFlags.has_fire = true;
+    if (!g.runFlags.has_nameless_fire) g.runFlags.has_nameless_fire = true;
+    if (!g.runFlags.has_general_seal) g.runFlags.has_general_seal = true;
     Gates.enterFireSwordVault();
   }
   if (st === 3) {
@@ -393,7 +393,7 @@ function drawTitle(dt) {
       color: '#c0a878',
     });
   }
-  text('Tab 键位 · SAN-13 关1截江', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
+  text('Tab 键位 · SAN-14 关2定军', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
 }
 
 function drawSettings() {
