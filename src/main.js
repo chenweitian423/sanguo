@@ -305,9 +305,11 @@ function clearStage() {
     g._lastGateNote = g6.reason;
   }
   if (st === 7) {
+    // Prefer in-stage door; ENTER skip: if hammer, mark thunder route note only
     const th = Gates.enterThunderRoute(g.runFlags);
-    if (th.ok) g.runFlags.route_s7 = 'thunder';
-    g._lastGateNote = th.ok ? th.reason : '主路越吉→魏延（无锤）';
+    g._lastGateNote = th.ok
+      ? (g.runFlags.route_s7 === 'thunder' ? th.reason : '有锤可走电道（本局若未进门则主路）')
+      : '主路越吉→魏延（无锤）';
   }
   g.state = S.CLEAR;
   g.clearT = 2.2;
@@ -393,7 +395,7 @@ function drawTitle(dt) {
       color: '#c0a878',
     });
   }
-  text('Tab 键位 · SAN-18 关6雪战', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
+  text('Tab 键位 · SAN-19 关7终战', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
 }
 
 function drawSettings() {

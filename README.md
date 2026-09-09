@@ -63,6 +63,7 @@ python3 -m http.server 8080
 - [SAN-16](https://linear.app/sanguo/issue/SAN-16/关4-大意失荆州吕蒙貂蝉灯门雷神锤)
 - [SAN-17](https://linear.app/sanguo/issue/SAN-17/关5-智破八阵破阵吕布线)
 - [SAN-18](https://linear.app/sanguo/issue/SAN-18/关6-雪战夺荆州许褚线爆剑密)
+- [SAN-19](https://linear.app/sanguo/issue/SAN-19/关7-三国归一统主路电道终战)
 
 ## 道具掉落（SAN-10）
 
@@ -126,3 +127,9 @@ python3 -m http.server 8080
 - Boss：**许褚**(毒) → **孟获**(爆) → **黄盖**(冰)（119 为孟获/黄盖二选一，原型两线都打）
 - 打**凸砖**开太阿密；**不强制和氏璧**；持冰不关闭（宽松）
 - **无**雨书灭火关卡门
+
+## 关7 三国归一统（SAN-19）
+
+- 主路：**越吉** → **魏延** → **司马懿** → **曹操**
+- **电道**：持 `has_leishenchui` 进门 → **跳过越吉/魏延**，仍打司马懿→曹操
+- 四剑齐仅为 Ending 评价（神兵四绝），不挡通关

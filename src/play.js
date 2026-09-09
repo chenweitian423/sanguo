@@ -208,7 +208,16 @@ export function createPlay(opts) {
 
   function bossesList() {
     if (!script) return [];
+    if (script.id === 7) {
+      const thunder =
+        (p.runFlags && p.runFlags.route_s7 === 'thunder') ||
+        insideZone === 'thunder' ||
+        (p.runFlags && p.runFlags.has_leishenchui && script._forceThunder);
+      if (thunder && script.bossesThunder) return script.bossesThunder;
+      if (script.bossesMain) return script.bossesMain;
+    }
     if (script.bosses) return script.bosses;
+    if (script.bossesMain) return script.bossesMain;
     if (script.boss) return [script.boss];
     return [];
   }
@@ -1084,7 +1093,13 @@ export function createPlay(opts) {
               if (v.flag === 'has_fire' || v.setInside === 'fire_sword') {
                 Gates.enterFireSwordVault();
               }
-              setMsg(v.note || `进入 ${v.label || '密室'}`, 1.2);
+              if (v.setRoute && p.runFlags) {
+                p.runFlags.route_s7 = v.setRoute;
+                const gate = Gates.enterThunderRoute(p.runFlags);
+                setMsg(gate.ok ? gate.reason : (v.note || '电道'), 2);
+              } else {
+                setMsg(v.note || `进入 ${v.label || '密室'}`, 1.2);
+              }
               ensureSideBoss();
             }
             if (v.grantBag || v.bagItem || v.flag) {
@@ -1332,7 +1347,7 @@ export function createPlay(opts) {
 
     drawText(
       ctx,
-      '关6雪战 · 打凸砖开太阿 · 不锁冰',
+      '关7 · 电道需雷神锤 · 终战曹操',
       W / 2,
       212,
       6,
@@ -1422,6 +1437,9 @@ export function createPlay(opts) {
     }
     if (insideZone) drawText(ctx, `密室:${insideZone}`, 8, 72, 6, '#80a0c0');
     if (script && script.id === 4) drawText(ctx, `灯序 ${lampSeq}/2`, 8, 82, 6, '#e0c060');
+    if (script && script.id === 7 && p.runFlags) {
+      drawText(ctx, p.runFlags.route_s7 === 'thunder' ? '路线:电道' : '路线:主路', 8, 82, 6, '#a0c0e0');
+    }
     if (p.runFlags) drawText(ctx, flagStrip(p.runFlags), W - 8, H - 12, 5.5, '#a09070', 'right');
   }
 
