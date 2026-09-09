@@ -1,13 +1,13 @@
 import { ROSTER, STAGES, W, H, CONTINUE_SEC, INTRO_SEC } from './data.js';
+import { createPlay } from './play.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const hintEl = document.getElementById('hint');
 
 hintEl.textContent =
-  '投币 5/6/C · 开始 1/Enter · 选人 方向+A · 过关 Enter · 假死 D · Esc 回标题';
+  '投币5/6 · 开始1 · 选人方向+A · Play：A攻/→A大斩/B跳/→→跑/→C防/AB血杀/ABC爆气/C天书栏/D用书 · ENTER过关';
 
-/** @enum {string} */
 const S = {
   TITLE: 'TitleCoin',
   CHAR: 'CharSelect',
@@ -39,7 +39,7 @@ const g = {
   cursor: 0,
   charId: null,
   charName: '',
-  stageIndex: 0, // 0..6
+  stageIndex: 0,
   introT: 0,
   clearT: 0,
   continueT: 0,
@@ -50,11 +50,104 @@ const g = {
   clears: 0,
 };
 
-const keysDown = new Set();
+const play = createPlay({ W, H });
 
-function addCredit() {
-  g.credit = Math.min(99, g.credit + 1);
+/** @type {Set<string>} */
+const held = new Set();
+/** @type {Set<string>} */
+const pressed = new Set();
+
+function keyNorm(e) {
+  if (e.code === 'Space') return 'Space';
+  if (e.key.length === 1) return e.key.toLowerCase();
+  return e.key;
 }
+
+window.addEventListener('keydown', (e) => {
+  const k = keyNorm(e);
+  if (!held.has(k)) pressed.add(k);
+  held.add(k);
+
+  if (k === 'Escape') {
+    backToTitle();
+    e.preventDefault();
+    return;
+  }
+
+  if (k === '5' || k === '6') {
+    g.credit = Math.min(99, g.credit + 1);
+    e.preventDefault();
+    return;
+  }
+  // C is coin on title only; in play C is item/guard — handle coin when not in PLAY/CHAR
+  if (k === 'c' && g.state !== S.PLAY && g.state !== S.CHAR) {
+    g.credit = Math.min(99, g.credit + 1);
+    e.preventDefault();
+    return;
+  }
+
+  switch (g.state) {
+    case S.TITLE:
+      if (k === '1' || k === 'Enter') {
+        startRun();
+        e.preventDefault();
+      }
+      break;
+    case S.CHAR: {
+      const cols = 5;
+      if (k === 'ArrowLeft') {
+        const col = g.cursor % cols;
+        g.cursor = col === 0 ? g.cursor + cols - 1 : g.cursor - 1;
+      }
+      if (k === 'ArrowRight') {
+        const col = g.cursor % cols;
+        g.cursor = col === cols - 1 ? g.cursor - (cols - 1) : g.cursor + 1;
+      }
+      if (k === 'ArrowUp') g.cursor = (g.cursor - cols + ROSTER.length) % ROSTER.length;
+      if (k === 'ArrowDown') g.cursor = (g.cursor + cols) % ROSTER.length;
+      if (k === 'a' || k === 'z' || k === 'j' || k === 'Enter') {
+        confirmChar();
+        e.preventDefault();
+      }
+      break;
+    }
+    case S.INTRO:
+      if (k === '1' || k === 'Enter') {
+        enterPlay();
+        e.preventDefault();
+      }
+      break;
+    case S.PLAY:
+      if (k === 'Enter') {
+        clearStage();
+        e.preventDefault();
+      }
+      break;
+    case S.CLEAR:
+      if (k === 'Enter' || k === '1') {
+        nextAfterClear();
+        e.preventDefault();
+      }
+      break;
+    case S.CONTINUE:
+      if (k === '1' || k === 'Enter') {
+        doContinue();
+        e.preventDefault();
+      }
+      break;
+    case S.GAMEOVER:
+    case S.ENDING:
+      if (k === 'Enter' || k === '1') {
+        backToTitle();
+        e.preventDefault();
+      }
+      break;
+  }
+});
+
+window.addEventListener('keyup', (e) => {
+  held.delete(keyNorm(e));
+});
 
 function startRun() {
   if (g.credit < 1) return;
@@ -81,6 +174,7 @@ function enterIntro() {
 
 function enterPlay() {
   g.state = S.PLAY;
+  play.reset();
 }
 
 function clearStage() {
@@ -108,7 +202,6 @@ function die() {
 function doContinue() {
   if (g.credit < 1) return false;
   g.credit -= 1;
-  // RunFlags kept
   enterPlay();
   return true;
 }
@@ -126,120 +219,18 @@ function backToTitle() {
   g.runFlags = emptyFlags();
 }
 
-window.addEventListener('keydown', (e) => {
-  if (e.repeat) return;
-  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-  keysDown.add(k);
-
-  if (k === 'Escape') {
-    backToTitle();
-    e.preventDefault();
-    return;
-  }
-
-  // Coin anywhere
-  if (k === '5' || k === '6' || k === 'c') {
-    addCredit();
-    e.preventDefault();
-    return;
-  }
-
-  switch (g.state) {
-    case S.TITLE: {
-      if (k === '1' || k === 'Enter') {
-        startRun();
-        e.preventDefault();
-      }
-      break;
-    }
-    case S.CHAR: {
-      const cols = 5;
-      if (k === 'ArrowLeft') {
-        const col = g.cursor % cols;
-        g.cursor = col === 0 ? g.cursor + cols - 1 : g.cursor - 1;
-      }
-      if (k === 'ArrowRight') {
-        const col = g.cursor % cols;
-        g.cursor = col === cols - 1 ? g.cursor - (cols - 1) : g.cursor + 1;
-      }
-      if (k === 'ArrowUp') g.cursor = (g.cursor - cols + ROSTER.length) % ROSTER.length;
-      if (k === 'ArrowDown') g.cursor = (g.cursor + cols) % ROSTER.length;
-      if (k === 'a' || k === 'z' || k === 'j' || k === 'Enter') {
-        confirmChar();
-        e.preventDefault();
-      }
-      break;
-    }
-    case S.INTRO: {
-      if (k === '1' || k === 'Enter') {
-        enterPlay();
-        e.preventDefault();
-      }
-      break;
-    }
-    case S.PLAY: {
-      if (k === 'Enter' || k === '1') {
-        clearStage();
-        e.preventDefault();
-      }
-      if (k === 'd' || k === 'x' || k === 'k') {
-        die();
-        e.preventDefault();
-      }
-      break;
-    }
-    case S.CLEAR: {
-      if (k === 'Enter' || k === '1') {
-        nextAfterClear();
-        e.preventDefault();
-      }
-      break;
-    }
-    case S.CONTINUE: {
-      if (k === '1' || k === 'Enter') {
-        if (!doContinue()) {
-          // no credit: stay until timeout or coin then press again
-        }
-        e.preventDefault();
-      }
-      break;
-    }
-    case S.GAMEOVER:
-    case S.ENDING: {
-      if (k === 'Enter' || k === '1') {
-        backToTitle();
-        e.preventDefault();
-      }
-      break;
-    }
-  }
-});
-
-window.addEventListener('keyup', (e) => {
-  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-  keysDown.delete(k);
-});
-
 function fill(color) {
   ctx.fillStyle = color;
   ctx.fillRect(0, 0, W, H);
 }
 
 function text(str, x, y, opts = {}) {
-  const {
-    size = 10,
-    align = 'left',
-    baseline = 'top',
-    color = '#e8dcc8',
-    shadow = true,
-  } = opts;
+  const { size = 10, align = 'left', color = '#e8dcc8' } = opts;
   ctx.font = `${size}px "PingFang SC","Microsoft YaHei",monospace`;
   ctx.textAlign = align;
-  ctx.textBaseline = baseline;
-  if (shadow) {
-    ctx.fillStyle = '#000';
-    ctx.fillText(str, x + 1, y + 1);
-  }
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = '#000';
+  ctx.fillText(str, x + 1, y + 1);
   ctx.fillStyle = color;
   ctx.fillText(str, x, y);
 }
@@ -247,32 +238,30 @@ function text(str, x, y, opts = {}) {
 function drawTitle(dt) {
   g.blink += dt;
   fill('#120e0c');
-  // fake scanlines
   ctx.fillStyle = 'rgba(0,0,0,0.15)';
   for (let y = 0; y < H; y += 2) ctx.fillRect(0, y, W, 1);
-
   text('烽火三国', W / 2, 48, { size: 22, align: 'center', color: '#f0c060' });
   text('FENGHUO SANGUO', W / 2, 74, { size: 8, align: 'center', color: '#8a7060' });
   text('横版合作街机 · 384×224', W / 2, 96, { size: 8, align: 'center', color: '#a09080' });
-
   text(`CREDIT  ${String(g.credit).padStart(2, '0')}`, W / 2, 140, {
     size: 10,
     align: 'center',
     color: '#ffe8a0',
   });
-
   if (Math.floor(g.blink * 2) % 2 === 0) {
-    const msg = g.credit > 0 ? '按 1 / ENTER 开始' : '投币 5 / 6 / C';
-    text(msg, W / 2, 168, { size: 9, align: 'center', color: '#c0a878' });
+    text(g.credit > 0 ? '按 1 / ENTER 开始' : '投币 5 / 6', W / 2, 168, {
+      size: 9,
+      align: 'center',
+      color: '#c0a878',
+    });
   }
-  text('SAN-5 流程骨架', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
+  text('SAN-5+6 流程 · 操作与气', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
 }
 
 function drawChar() {
   fill('#10141c');
   text('选择武将', W / 2, 8, { size: 12, align: 'center', color: '#f0d090' });
-  text('十人全开 · 可同角（2P后续）', W / 2, 24, { size: 7, align: 'center', color: '#708090' });
-
+  text('十人全开', W / 2, 24, { size: 7, align: 'center', color: '#708090' });
   const cols = 5;
   const cardW = 64;
   const cardH = 56;
@@ -281,7 +270,6 @@ function drawChar() {
   const gridW = cols * cardW + (cols - 1) * gapX;
   const ox = (W - gridW) / 2;
   const oy = 44;
-
   ROSTER.forEach((c, i) => {
     const col = i % cols;
     const row = Math.floor(i / cols);
@@ -299,12 +287,6 @@ function drawChar() {
       color: sel ? '#fff0c0' : '#c8d0d8',
     });
   });
-
-  text('←→↑↓ 移动 · A/ENTER 确定', W / 2, 210, {
-    size: 7,
-    align: 'center',
-    color: '#708090',
-  });
 }
 
 function drawIntro() {
@@ -314,31 +296,6 @@ function drawIntro() {
   text(st.name, W / 2, 96, { size: 18, align: 'center', color: '#f0e0b0' });
   text(st.blurb, W / 2, 124, { size: 8, align: 'center', color: '#90a0b0' });
   text(`${g.charName} 出阵`, W / 2, 152, { size: 9, align: 'center', color: '#c0a060' });
-  text('ENTER 跳过', W / 2, 200, { size: 7, align: 'center', color: '#506070' });
-}
-
-function drawPlay() {
-  const st = STAGES[g.stageIndex];
-  fill('#182028');
-  // ground
-  ctx.fillStyle = '#2a3840';
-  ctx.fillRect(0, 160, W, 64);
-  ctx.fillStyle = '#3a4850';
-  ctx.fillRect(0, 160, W, 2);
-
-  text(`${st.name}`, 8, 6, { size: 9, color: '#e0d0b0' });
-  text(`${g.charName}`, 8, 20, { size: 8, color: '#a0c0e0' });
-  text('HP ████████░░', 8, 34, { size: 7, color: '#80e080' });
-  text('气 ●●○', 8, 46, { size: 7, color: '#f0c040' });
-
-  // stub fighter
-  ctx.fillStyle = '#c08040';
-  ctx.fillRect(80, 130, 16, 28);
-  text(g.charName[0], 88, 136, { size: 10, align: 'center', color: '#201810', shadow: false });
-
-  text('占位战场（SAN-5）', W / 2, 100, { size: 9, align: 'center', color: '#608090' });
-  text('ENTER 过关 · D 假死', W / 2, 200, { size: 7, align: 'center', color: '#708090' });
-  text(`CREDIT ${g.credit}`, W - 8, 6, { size: 7, align: 'right', color: '#c0a878' });
 }
 
 function drawClear() {
@@ -346,44 +303,77 @@ function drawClear() {
   fill('#101820');
   text('STAGE CLEAR', W / 2, 72, { size: 14, align: 'center', color: '#80e0a0' });
   text(st.name, W / 2, 100, { size: 11, align: 'center', color: '#e8dcc8' });
-  text(`通关数 ${g.clears} · 死亡 ${g.deaths}`, W / 2, 128, {
+  text(`通关 ${g.clears} · 死亡 ${g.deaths}`, W / 2, 128, {
     size: 8,
     align: 'center',
     color: '#90a0b0',
   });
-  text('ENTER 下一关', W / 2, 180, { size: 8, align: 'center', color: '#c0a878' });
 }
 
 function drawContinue() {
   fill('#180808');
   text('CONTINUE?', W / 2, 64, { size: 16, align: 'center', color: '#f06060' });
-  text(String(Math.ceil(g.continueT)), W / 2, 100, {
-    size: 28,
-    align: 'center',
-    color: '#ffe0a0',
-  });
+  text(String(Math.ceil(g.continueT)), W / 2, 100, { size: 28, align: 'center', color: '#ffe0a0' });
   text(`CREDIT ${g.credit}`, W / 2, 148, { size: 10, align: 'center', color: '#e0c080' });
-  text(
-    g.credit > 0 ? '1 / ENTER 续关（保留 RunFlags）' : '请先投币 5/6/C',
-    W / 2,
-    176,
-    { size: 8, align: 'center', color: '#a09080' },
-  );
+  text(g.credit > 0 ? '1 / ENTER 续关' : '请先投币 5/6', W / 2, 176, {
+    size: 8,
+    align: 'center',
+    color: '#a09080',
+  });
 }
 
 function drawGameOver() {
   fill('#0c0c10');
   text('GAME OVER', W / 2, 90, { size: 18, align: 'center', color: '#c04040' });
-  text('RunFlags 已清空', W / 2, 120, { size: 8, align: 'center', color: '#808090' });
   text('ENTER 回标题', W / 2, 160, { size: 8, align: 'center', color: '#a09080' });
 }
 
 function drawEnding() {
   fill('#101828');
   text('ENDING', W / 2, 70, { size: 14, align: 'center', color: '#f0d080' });
-  text('曹操败北 · 三国归一（占位）', W / 2, 100, { size: 10, align: 'center', color: '#e8dcc8' });
+  text('曹操败北 · 占位', W / 2, 100, { size: 10, align: 'center', color: '#e8dcc8' });
   text(g.charName + ' 通关', W / 2, 124, { size: 9, align: 'center', color: '#a0c0e0' });
-  text('ENTER 回标题', W / 2, 170, { size: 8, align: 'center', color: '#8090a0' });
+}
+
+function buildPlayInput() {
+  const a = pressed.has('a') || pressed.has('z') || pressed.has('j');
+  const b = pressed.has('b') || pressed.has('x') || pressed.has('k');
+  // D use item — not die anymore in SAN-6
+  const d = pressed.has('d') || pressed.has('l');
+  const c = pressed.has('c');
+  const left = held.has('ArrowLeft');
+  const right = held.has('ArrowRight');
+  const down = held.has('ArrowDown');
+  const leftTap = pressed.has('ArrowLeft');
+  const rightTap = pressed.has('ArrowRight');
+  const aHeld = held.has('a') || held.has('z') || held.has('j');
+  const bHeld = held.has('b') || held.has('x') || held.has('k');
+  const cHeld = held.has('c');
+
+  const abcTap = aHeld && bHeld && c && (a || b || c);
+  const abTap = aHeld && bHeld && !cHeld && (a || b) && !abcTap;
+  const forwardA = a && ((right && !left) || (left && !right));
+
+  return {
+    left,
+    right,
+    down,
+    leftTap,
+    rightTap,
+    aTap: a && !abTap && !abcTap && !forwardA,
+    bTap: b && !abTap && !abcTap,
+    cTap: c && !cHeld === false ? c && !(aHeld && bHeld) : c,
+    cHeld,
+    dTap: d,
+    abcTap: (aHeld && bHeld && cHeld && (a || b || c)),
+    abTap: (aHeld && bHeld && !held.has('c') && (a || b)),
+    forwardA: a && ((held.has('ArrowRight') && gFaceRight()) || (held.has('ArrowLeft') && !gFaceRight())),
+  };
+}
+
+function gFaceRight() {
+  // approximate: if holding right, forward is right
+  return held.has('ArrowRight') || !held.has('ArrowLeft');
 }
 
 let last = performance.now();
@@ -412,6 +402,40 @@ function frame(now) {
       g.endingT -= dt;
       if (g.endingT <= 0) backToTitle();
       break;
+    case S.PLAY: {
+      const input = buildPlayInput();
+      // Fix cTap: open panel on C press alone
+      input.cTap = pressed.has('c') && !(held.has('a') || held.has('z') || held.has('j')) && !(held.has('b') || held.has('x'));
+      input.abcTap =
+        pressed.has('c') &&
+        (held.has('a') || held.has('z') || held.has('j')) &&
+        (held.has('b') || held.has('x') || held.has('k'));
+      input.abTap =
+        !input.abcTap &&
+        (pressed.has('a') || pressed.has('z') || pressed.has('j') || pressed.has('b') || pressed.has('x')) &&
+        (held.has('a') || held.has('z') || held.has('j')) &&
+        (held.has('b') || held.has('x') || held.has('k'));
+      input.forwardA =
+        (pressed.has('a') || pressed.has('z') || pressed.has('j')) &&
+        (held.has('ArrowRight') || held.has('ArrowLeft')) &&
+        !input.abTap &&
+        !input.abcTap;
+      input.aTap =
+        (pressed.has('a') || pressed.has('z') || pressed.has('j')) &&
+        !input.forwardA &&
+        !input.abTap &&
+        !input.abcTap;
+      input.bTap =
+        (pressed.has('b') || pressed.has('x') || pressed.has('k')) && !input.abTap && !input.abcTap;
+      // ↓+B squat: if down and b tap, already squatting via down held; jump only if !down
+      if (held.has('ArrowDown') && input.bTap) {
+        input.bTap = false; // squat instead of jump
+      }
+
+      play.update(input, dt);
+      if (play.dead) die();
+      break;
+    }
   }
 
   switch (g.state) {
@@ -424,9 +448,16 @@ function frame(now) {
     case S.INTRO:
       drawIntro();
       break;
-    case S.PLAY:
-      drawPlay();
+    case S.PLAY: {
+      fill('#182028');
+      ctx.fillStyle = '#2a3840';
+      ctx.fillRect(0, 160, W, 64);
+      ctx.fillStyle = '#3a4850';
+      ctx.fillRect(0, 160, W, 2);
+      const st = STAGES[g.stageIndex];
+      play.draw(ctx, { stageName: st.name, charName: g.charName, credit: g.credit });
       break;
+    }
     case S.CLEAR:
       drawClear();
       break;
@@ -441,6 +472,7 @@ function frame(now) {
       break;
   }
 
+  pressed.clear();
   requestAnimationFrame(frame);
 }
 
