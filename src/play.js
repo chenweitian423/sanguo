@@ -822,7 +822,7 @@ export function createPlay(opts) {
 
     drawText(
       ctx,
-      '2P：卷轴跟落后 · WASD+U攻击 · 分分各算',
+      '1P：WASD+JKLI=ABCD · Tab改键 · 卷轴跟落后',
       W / 2,
       212,
       6,
