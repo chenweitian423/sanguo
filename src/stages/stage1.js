@@ -11,25 +11,25 @@ export const STAGE1 = {
       id: 't0',
       teach: 'J=攻击 · WASD移动',
       grunts: [
-        { x: 220, hp: 14 },
-        { x: 260, hp: 14 },
+        { x: 220, hp: 14, type: 'sword' },
+        { x: 260, hp: 14, type: 'spear' },
       ],
     },
     {
       id: 't1',
       teach: '同向连按跑步',
       grunts: [
-        { x: 300, hp: 16 },
-        { x: 340, hp: 16 },
-        { x: 380, hp: 16 },
+        { x: 300, hp: 16, type: 'sword' },
+        { x: 340, hp: 16, type: 'throw' },
+        { x: 380, hp: 16, type: 'archer' },
       ],
     },
     {
       id: 't2',
       teach: '方向+J 大斩 · K跳跃',
       grunts: [
-        { x: 420, hp: 18 },
-        { x: 460, hp: 18 },
+        { x: 420, hp: 18, type: 'spear' },
+        { x: 460, hp: 18, type: 'shield' },
       ],
     },
     {

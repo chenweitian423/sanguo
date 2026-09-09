@@ -1,4 +1,4 @@
-/** Play-field: controls, qi, HUD, ItemPanel (SAN-5/6/7). */
+/** Play-field: controls, qi, HUD, ItemPanel (SAN-5/6/7) + SAN-21 polish hooks. */
 import { PAGE_NAMES, PAGE_THROW, cloneBag } from './items.js';
 import { movesFor } from './moves.js';
 import { applySwordFlag, flagStrip, Gates } from './flags.js';
@@ -20,6 +20,9 @@ import {
   tickBossAi,
   airborneHitMult,
 } from './bosses.js';
+import { makeGrunt } from './grunts.js';
+import { playSfx, playBgm } from './audio.js';
+import { UI, drawUiText } from './ui.js';
 
 /**
  * @param {{ W: number, H: number }} opts
@@ -106,6 +109,8 @@ export function createPlay(opts) {
   /** @type {any|null} */
   let p2 = null;
   let t = 0;
+  let wasGuarding = false;
+  let wasGuarding2 = false;
 
   function spawnEnemy(bossLike) {
     return {
@@ -205,11 +210,16 @@ export function createPlay(opts) {
       loadStageScript();
     } else {
       enemy = spawnEnemy(true);
-      const gHp = scaleEnemyHp(18, playerCount);
-      grunts = [
-        { x: 280, y: 148, hp: gHp, hpMax: gHp, alive: true, stunT: 0 },
-        { x: 340, y: 148, hp: gHp, hpMax: gHp, alive: true, stunT: 0 },
-      ];
+      const mk = (x, i) =>
+        makeGrunt(
+          { x },
+          {
+            stageId,
+            index: i,
+            scaleHp: (n) => scaleEnemyHp(n, playerCount),
+          },
+        );
+      grunts = [mk(280, 0), mk(340, 1)];
       chests = [{ x: 200, y: 156, open: false }];
       if (enemy) {
         const bhp = scaleEnemyHp(enemy.hpMax, playerCount, { boss: true });
@@ -300,10 +310,13 @@ export function createPlay(opts) {
     const w = script.waves[idx];
     teachMsg = w.teach || '';
     setMsg(teachMsg, 2.2);
-    grunts = (w.grunts || []).map((g) => {
-      const hp = scaleEnemyHp(g.hp || 16, playerCount);
-      return { x: g.x, y: 148, hp, hpMax: hp, alive: true, stunT: 0 };
-    });
+    grunts = (w.grunts || []).map((g, i) =>
+      makeGrunt(g, {
+        stageId,
+        index: i,
+        scaleHp: (n) => scaleEnemyHp(n, playerCount),
+      }),
+    );
     if (w.chest) {
       chests.push({ x: w.chest.x, y: 156, open: false });
     }
@@ -346,6 +359,7 @@ export function createPlay(opts) {
       enemy.bumps = { count: raw.bumpsForPuppet, flag: 'has_puppet', item: 'puppet', msg: '撞×2 · 傀儡' };
     }
     bossAi = createBossAi(b.id);
+    playBgm('boss');
     const weakTag = (b.weak && b.weak.length) ? `弱${b.weak.join('/')}` : '无弱点';
     const need = enemy.bumps ? enemy.bumps.count : 0;
     teachMsg = need
@@ -401,20 +415,20 @@ export function createPlay(opts) {
     const eyeIndex = w.eyeIndex != null ? w.eyeIndex : 0;
     const spawnKind = w.spawn || 'jump';
     grunts = (w.grunts || []).map((g, i) => {
-      const hp = scaleEnemyHp(g.hp || 16, playerCount);
       const isEye = i === eyeIndex || !!g.isEye;
-      const unit = {
-        x: g.x,
-        y: 148,
-        hp,
-        hpMax: hp,
-        alive: true,
-        stunT: 0,
+      const typed = {
+        ...g,
+        type: g.type || (spawnKind === 'charge' ? 'spear' : g.type),
         isEye,
-        spawn: spawnKind,
-        settled: true,
-        vx: 0,
       };
+      const unit = makeGrunt(typed, {
+        stageId,
+        index: i,
+        scaleHp: (n) => scaleEnemyHp(n, playerCount),
+      });
+      unit.spawn = spawnKind;
+      unit.settled = true;
+      unit.vx = 0;
       if (spawnKind === 'jump') {
         unit.y = 148 - (70 + (i % 3) * 12);
         unit.vy = 0;
@@ -785,6 +799,7 @@ export function createPlay(opts) {
       if (c.requireFlag && !(p.runFlags && p.runFlags[c.requireFlag])) continue;
       if (Math.abs(c.x - attacker.x) < reach && Math.abs(c.y - attacker.y) < 30) {
         c.open = true;
+        playSfx('chest');
         if (c.swordId || c.flag) {
           if (c.flag && p.runFlags) p.runFlags[c.flag] = true;
           if (c.swordId) {
@@ -857,7 +872,10 @@ export function createPlay(opts) {
         }
       }
     }
-    if (hit) gainPipFromHitFor(attacker);
+    if (hit) {
+      playSfx('hit');
+      gainPipFromHitFor(attacker);
+    }
   }
 
   function scaledDmgFor(fighter, base, atkElem = null) {
@@ -876,12 +894,15 @@ export function createPlay(opts) {
   }
 
   function gainPipFromHitFor(fighter) {
-    if (fighter.qiPips < fighter.qiMax) fighter.qiPips += 1;
-    else fighter.qiCharge = Math.min(1, fighter.qiCharge + 0.15);
+    if (fighter.qiPips < fighter.qiMax) {
+      fighter.qiPips += 1;
+      playSfx('qi', { vol: 0.08 });
+    } else fighter.qiCharge = Math.min(1, fighter.qiCharge + 0.15);
   }
 
   function onSideEnemyDead(killer = p) {
     if (!sideEnemy) return;
+    playSfx('boss_die');
     sideEnemy.alive = false;
     sideEnemy.cleared = true;
     sideBossAi = null;
@@ -894,6 +915,7 @@ export function createPlay(opts) {
   }
 
   function onEnemyDead(killer = p) {
+    playSfx('boss_die');
     enemy.alive = false;
     enemy.hp = 0;
     bossAi = null;
@@ -963,6 +985,7 @@ export function createPlay(opts) {
     p.qiPips -= 1;
     p.burstT = 3.5;
     p.invulnT = 0.35;
+    playSfx('burst');
     setMsg('爆气！', 0.8);
   }
 
@@ -999,6 +1022,7 @@ export function createPlay(opts) {
     }
     it.qty -= 1;
     p.fxFlash = 0.7;
+    playSfx('item');
     p.bookBoost = p.burstT > 0 && it.kind === 'book';
 
     if (it.kind === 'stun') {
@@ -1088,10 +1112,13 @@ export function createPlay(opts) {
     if (input.bTap && !p.airborne && !input.down) {
       p.airborne = true;
       p.vy = -220;
+      playSfx('jump');
     }
 
     p.squatting = input.down && !p.airborne;
     p.guarding = input.cHeld && (input.right || input.left);
+    if (p.guarding && !wasGuarding) playSfx('guard');
+    wasGuarding = p.guarding;
 
     if (input.rightTap) {
       if (t - p.lastRightT < 0.28) p.running = true;
@@ -1146,6 +1173,7 @@ export function createPlay(opts) {
       for (const f of livingFighters()) {
         if (Math.abs(c.x - f.x) < 12) {
           c.open = true;
+          playSfx('chest');
           if (c.swordId || c.flag) {
             if (c.flag && p.runFlags) p.runFlags[c.flag] = true;
             if (c.swordId) {
@@ -1371,6 +1399,7 @@ export function createPlay(opts) {
       const h = groundHeals[i];
       if (Math.abs(h.x - fighter.x) < 14 && Math.abs(h.y - (fighter.y + 20)) < 24) {
         fighter.hp = Math.min(fighter.hpMax, fighter.hp + h.heal);
+        playSfx('heal');
         setMsg(`${h.label} +${h.heal}HP`, 0.8);
         groundHeals.splice(i, 1);
       }
@@ -1379,6 +1408,7 @@ export function createPlay(opts) {
       const m = moneys[i];
       if (Math.abs(m.x - fighter.x) < 14 && Math.abs(m.y - (fighter.y + 20)) < 24) {
         addScoreTo(fighter, m.score);
+        playSfx('coin', { vol: 0.08 });
         setMsg(`${m.kind} +${m.score}`, 0.6);
         moneys.splice(i, 1);
       }
@@ -1394,6 +1424,7 @@ export function createPlay(opts) {
     if (inp.abcTap && f.qiPips >= 1) {
       f.qiPips -= 1;
       f.burstT = 3.5;
+      playSfx('burst');
       f.invulnT = 0.35;
       setMsg('2P 爆气', 0.6);
     } else if (inp.aTap && f.atkT <= 0) {
@@ -1406,9 +1437,12 @@ export function createPlay(opts) {
     if (inp.bTap && !f.airborne && !inp.down) {
       f.airborne = true;
       f.vy = -220;
+      playSfx('jump');
     }
     f.squatting = inp.down && !f.airborne;
     f.guarding = inp.cHeld && (inp.right || inp.left);
+    if (f.guarding && !wasGuarding2) playSfx('guard');
+    wasGuarding2 = f.guarding;
 
     if (inp.rightTap) {
       if (t - f.lastRightT < 0.28) f.running = true;
@@ -1495,9 +1529,10 @@ export function createPlay(opts) {
     // grunts
     for (const g of grunts) {
       if (!g.alive) continue;
-      ctx.fillStyle = g.isEye ? '#d4a017' : '#606878';
+      ctx.fillStyle = g.isEye ? '#d4a017' : g.color || '#606878';
       ctx.fillRect(g.x - 8, g.y + 4, 16, 24);
-      if (g.isEye) drawText(ctx, '阵眼', g.x, g.y - 10, 6, '#ffe080', 'center');
+      if (g.isEye) drawText(ctx, '阵眼', g.x, g.y - 10, UI.micro, '#ffe080', 'center');
+      else if (g.label) drawText(ctx, g.label, g.x, g.y - 8, UI.micro, '#c0c8d0', 'center');
     }
     // ground heals
     for (const h of groundHeals) {
@@ -1626,7 +1661,7 @@ export function createPlay(opts) {
     // P1 plate
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.fillRect(4, 4, 168, 56);
-    drawText(ctx, hud.charName, 28, 6, 8, '#e8dcc8');
+    drawText(ctx, hud.charName, 28, 6, UI.hud, '#e8dcc8');
     drawText(ctx, `命×${p.lives}`, 28, 16, 7, '#c0a878');
     // HP
     drawText(ctx, 'HP', 28, 28, 7, '#80e080');
@@ -1782,14 +1817,14 @@ export function createPlay(opts) {
   }
 
   function drawText(ctx, str, x, y, size, color, align = 'left') {
-    ctx.font = `${size}px "PingFang SC","Microsoft YaHei",monospace`;
-    ctx.textAlign = align;
-    ctx.textBaseline = 'top';
-    ctx.fillStyle = '#000';
-    ctx.fillText(str, x + 1, y + 1);
-    ctx.fillStyle = color;
-    ctx.fillText(str, x, y);
+    drawUiText(ctx, str, x, y, {
+      size: size != null ? size : UI.hud,
+      color: color || '#e8dcc8',
+      align,
+      stroke: UI.stroke,
+    });
   }
+
 
   return {
     reset,

@@ -65,6 +65,7 @@ python3 -m http.server 8080
 - [SAN-18](https://linear.app/sanguo/issue/SAN-18/关6-雪战夺荆州许褚线爆剑密)
 - [SAN-19](https://linear.app/sanguo/issue/SAN-19/关7-三国归一统主路电道终战)
 - [SAN-20](https://linear.app/sanguo/issue/SAN-20/全boss-ai轴弱点接入)
+- [SAN-21](https://linear.app/sanguo/issue/SAN-21) Done：音效UI + 评价彩蛋 + 杂兵档
 
 ## 道具掉落（SAN-10）
 
@@ -89,6 +90,14 @@ python3 -m http.server 8080
 - 2P：Boss HP×1.4，杂兵×1.65，掉落数量×1.5；Boss 包两人全额
 - 2P 键位默认方向键+小键盘，可在 Tab 设置里改
 
+
+
+## 音效 / UI / 杂兵档（SAN-21）
+
+- `src/audio.js`：id 钩子 WebAudio 蜂鸣占位（hit/jump/guard/burst/qi/coin/heal/item/chest/boss_die/continue_tick + BGM 占位）
+- `src/ui.js`：字号 token（Logo22–28 · 闪卡18–20 · HUD/选人8–9 · 倒计时12–16 · 描边1px）
+- Ending / Clear：评价条（神兵四绝为主；破阵完胜/电道/傀儡/无损等轻彩蛋）
+- `src/grunts.js`：杂兵相对档（刀/枪/盾/弓/投/忍/骑/甲/豹/锐，A=10 基线）+ 关卡 HP/ATK 倍率（1:0.85 … 6–7:1.3/1.2）
 
 ## Boss AI / 轴 / 弱点（SAN-20）
 
