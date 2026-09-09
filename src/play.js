@@ -202,7 +202,8 @@ export function createPlay(opts) {
     chests = [];
     grunts = [];
 
-    p.score = p.score || 0;
+    if (opts.demo) p.score = 0;
+    else p.score = p.score || 0;
     syncLevel(false);
     scrollX = 0;
 
