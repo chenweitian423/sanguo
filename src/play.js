@@ -12,6 +12,7 @@ import {
   nextThreshold,
   BOSS_WEAK,
 } from './leveling.js';
+import { COOP, isTwoPlayer, scaleEnemyHp, scaleDropQty, trailingScrollX, clampPlayerX } from './coop.js';
 
 /**
  * @param {{ W: number, H: number }} opts
@@ -67,6 +68,10 @@ export function createPlay(opts) {
   let chests = [];
   /** @type {any[]} */
   let moneys = [];
+  let scrollX = 0;
+  let playerCount = 1;
+  /** @type {any|null} */
+  let p2 = null;
   let t = 0;
 
   function spawnEnemy(bossLike) {
@@ -85,7 +90,7 @@ export function createPlay(opts) {
     };
   }
 
-  function reset(lives = 3, charId = 'guanyu', runFlags = null) {
+  function reset(lives = 3, charId = 'guanyu', runFlags = null, opts = {}) {
     p.x = 80;
     p.y = 148;
     p.vx = 0;
@@ -129,28 +134,113 @@ export function createPlay(opts) {
       if (p.runFlags.has_fire) p.equippedSword = p.equippedSword || 'sword_fire';
     }
 
+    playerCount = opts.playerCount || 1;
+    const charId2 = opts.charId2 || 'zhangfei';
+
     groundHeals = [];
+    const gHp = scaleEnemyHp(18, playerCount);
     grunts = [
-      { x: 200, y: 148, hp: 18, hpMax: 18, alive: true, stunT: 0 },
-      { x: 240, y: 148, hp: 18, hpMax: 18, alive: true, stunT: 0 },
-      { x: 220, y: 148, hp: 18, hpMax: 18, alive: true, stunT: 0 },
+      { x: 280, y: 148, hp: gHp, hpMax: gHp, alive: true, stunT: 0 },
+      { x: 340, y: 148, hp: gHp, hpMax: gHp, alive: true, stunT: 0 },
+      { x: 400, y: 148, hp: gHp, hpMax: gHp, alive: true, stunT: 0 },
+      { x: 460, y: 148, hp: gHp, hpMax: gHp, alive: true, stunT: 0 },
     ];
-    chests = [{ x: 120, y: 156, open: false }];
+    chests = [{ x: 200, y: 156, open: false }, { x: 520, y: 156, open: false }];
     moneys = [];
     p.score = p.score || 0;
     syncLevel(false);
+    scrollX = 0;
+    // rescale boss for 2P
+    if (enemy) {
+      const bhp = scaleEnemyHp(enemy.hpMax, playerCount, { boss: true });
+      enemy.hpMax = bhp;
+      enemy.hp = bhp;
+      enemy.x = 560;
+    }
+    if (isTwoPlayer(playerCount)) {
+      p2 = makeFighter(charId2, lives, 56);
+      p2.runFlags = p.runFlags; // shared
+      p2.score = 0;
+      p2.level = 0;
+      p2.itemTier = 1;
+    } else {
+      p2 = null;
+    }
     t = 0;
   }
 
+  function makeFighter(charId, lives, startX) {
+    return {
+      x: startX,
+      y: 148,
+      vx: 0,
+      facing: 1,
+      hp: 100,
+      hpMax: 100,
+      lives,
+      qiPips: 0,
+      qiMax: 3,
+      qiCharge: 0,
+      running: false,
+      squatting: false,
+      guarding: false,
+      airborne: false,
+      vy: 0,
+      atkT: 0,
+      atkKind: '',
+      burstT: 0,
+      invulnT: 0,
+      fxFlash: 0,
+      bookBoost: false,
+      panelOpen: false,
+      panelPage: PAGE_THROW,
+      cursor: 0,
+      bag: cloneBag(),
+      equippedSword: null,
+      charId,
+      motionBuf: [],
+      specialName: '',
+      specialT: 0,
+      score: 0,
+      level: 0,
+      itemTier: 1,
+      msg: '',
+      msgT: 0,
+      lastRightT: -9,
+      lastLeftT: -9,
+      runFlags: null,
+      pad: 0,
+    };
+  }
+
   function addBagItem(itemId, qty = 1) {
-    const it = p.bag.find((x) => x.id === itemId);
+    addBagItemTo(p, itemId, qty);
+  }
+
+  function addBagItemTo(fighter, itemId, qty = 1) {
+    const it = fighter.bag.find((x) => x.id === itemId);
     if (!it) return;
     if (it.kind === 'sword') {
       it.held = true;
-      if (p.runFlags) applySwordFlag(p.runFlags, itemId);
+      fighter.equippedSword = itemId;
+      if (fighter.runFlags) applySwordFlag(fighter.runFlags, itemId);
       return;
     }
     it.qty = (it.qty || 0) + qty;
+  }
+
+  function livingFighters() {
+    const out = [];
+    if (p.hp > 0) out.push(p);
+    if (p2 && p2.hp > 0) out.push(p2);
+    return out;
+  }
+
+  function nearestFighter(atX) {
+    const live = livingFighters();
+    if (!live.length) return null;
+    live.sort((a, b) => Math.abs(a.x - atX) - Math.abs(b.x - atX));
+    return live[0];
   }
 
   function applyDrop(d, atX) {
@@ -158,26 +248,38 @@ export function createPlay(opts) {
     if (d.type === 'heal') {
       groundHeals.push({ x: atX, y: 168, heal: d.heal, label: d.label });
     } else if (d.type === 'bag') {
-      addBagItem(d.itemId, d.qty || 1);
-      const it = p.bag.find((x) => x.id === d.itemId);
+      const q = scaleDropQty(d.qty || 1, playerCount);
+      // nearest living fighter gets bag drop
+      const taker = nearestFighter(atX) || p;
+      addBagItemTo(taker, d.itemId, q);
+      const it = taker.bag.find((x) => x.id === d.itemId);
       setMsg(`获得 ${it ? it.name : d.itemId}`, 0.7);
     } else if (d.type === 'money') {
       moneys.push({ x: atX, y: 168, ...d });
     }
   }
 
-  function syncLevel(announce = true) {
-    const prev = p.level;
-    p.level = levelFromScore(p.score);
-    p.itemTier = itemPowerTier(p.level);
-    if (announce && p.level > prev) {
-      setMsg(`升级 LV${p.level} · 道具威力T${p.itemTier}`, 1.2);
+  function syncLevelFor(fighter, announce = true) {
+    const prev = fighter.level;
+    fighter.level = levelFromScore(fighter.score);
+    fighter.itemTier = itemPowerTier(fighter.level);
+    if (announce && fighter.level > prev) {
+      setMsg(`升级 LV${fighter.level} · 道具威力T${fighter.itemTier}`, 1.2);
     }
   }
 
+  function syncLevel(announce = true) {
+    syncLevelFor(p, announce);
+    if (p2) syncLevelFor(p2, false);
+  }
+
   function addScore(n) {
-    p.score += n;
-    syncLevel(true);
+    addScoreTo(p, n);
+  }
+
+  function addScoreTo(fighter, n) {
+    fighter.score += n;
+    syncLevelFor(fighter, true);
   }
 
   function setMsg(s, dur = 1.2) {
@@ -190,10 +292,8 @@ export function createPlay(opts) {
   }
 
   function gainPipFromHit() {
-    if (p.qiPips < p.qiMax) {
-      p.qiPips += 1;
-      setMsg('命中 +1 气珠', 0.55);
-    } else {
+    gainPipFromHitFor(p);
+  } else {
       p.qiCharge = Math.min(1, p.qiCharge + 0.15);
     }
   }
@@ -273,68 +373,81 @@ export function createPlay(opts) {
   }
 
   function scaledDmg(base, atkElem = null) {
-    const se = swordElem(p.equippedSword);
-    const elem = atkElem || se;
-    const weakList = enemy.weak || BOSS_WEAK.wood || [];
-    return finalDamage({
-      base,
-      charId: p.charId,
-      level: p.level,
-      atkElem: elem,
-      defElem: enemy.armorElem || null,
-      weakList,
-      swordBonus: p.equippedSword ? 0.15 : 0,
-    });
+    return scaledDmgFor(p, base, atkElem);
   }
 
-  function hitWorld(dmg, reach, atkElem = null) {
-    const dealt = scaledDmg(dmg, atkElem);
+  function hitWorld(dmg, reach, atkElem = null, attacker = p) {
+    const dealt = scaledDmgFor(attacker, dmg, atkElem);
     let hit = false;
     if (enemy.alive) {
-      const dx = (enemy.x - p.x) * p.facing;
-      const ok = reach > 70 ? Math.abs(enemy.x - p.x) < reach : dx > 0 && dx < reach;
-      if (ok && Math.abs(enemy.y - p.y) < 24) {
+      const dx = (enemy.x - attacker.x) * attacker.facing;
+      const ok = reach > 70 ? Math.abs(enemy.x - attacker.x) < reach : dx > 0 && dx < reach;
+      if (ok && Math.abs(enemy.y - attacker.y) < 24) {
         enemy.hp -= dealt;
         enemy.hitFlash = 0.15;
         hit = true;
-        if (enemy.hp <= 0) onEnemyDead();
+        if (enemy.hp <= 0) onEnemyDead(attacker);
       }
     }
     for (const g of grunts) {
       if (!g.alive) continue;
-      const dx = (g.x - p.x) * p.facing;
-      const ok = reach > 70 ? Math.abs(g.x - p.x) < reach : dx > 0 && dx < reach;
-      if (ok && Math.abs(g.y - p.y) < 24) {
+      const dx = (g.x - attacker.x) * attacker.facing;
+      const ok = reach > 70 ? Math.abs(g.x - attacker.x) < reach : dx > 0 && dx < reach;
+      if (ok && Math.abs(g.y - attacker.y) < 24) {
         g.hp -= dealt;
         hit = true;
-        if (g.hp <= 0) onGruntDead(g);
+        if (g.hp <= 0) onGruntDead(g, attacker);
       }
     }
-    // open chest by attack
     for (const c of chests) {
       if (c.open) continue;
-      if (Math.abs(c.x - p.x) < reach && Math.abs(c.y - p.y) < 30) {
+      if (Math.abs(c.x - attacker.x) < reach && Math.abs(c.y - attacker.y) < 30) {
         c.open = true;
         applyDrop(dropFromChest(), c.x);
         hit = true;
         setMsg('开箱', 0.5);
       }
     }
-    if (hit) gainPipFromHit();
+    if (hit) gainPipFromHitFor(attacker);
   }
 
-  function onEnemyDead() {
+  function scaledDmgFor(fighter, base, atkElem = null) {
+    const se = swordElem(fighter.equippedSword);
+    const elem = atkElem || se;
+    const weakList = enemy.weak || BOSS_WEAK.wood || [];
+    return finalDamage({
+      base,
+      charId: fighter.charId,
+      level: fighter.level,
+      atkElem: elem,
+      defElem: enemy.armorElem || null,
+      weakList,
+      swordBonus: fighter.equippedSword ? 0.15 : 0,
+    });
+  }
+
+  function gainPipFromHitFor(fighter) {
+    if (fighter.qiPips < fighter.qiMax) fighter.qiPips += 1;
+    else fighter.qiCharge = Math.min(1, fighter.qiCharge + 0.15);
+  }
+
+  function onEnemyDead(killer = p) {
     enemy.alive = false;
     enemy.hp = 0;
-    addScore(900);
+    const pack = 900;
+    if (isTwoPlayer(playerCount)) {
+      if (p.hp > 0) addScoreTo(p, pack);
+      if (p2 && p2.hp > 0) addScoreTo(p2, pack);
+    } else {
+      addScoreTo(killer, pack);
+    }
     for (const d of dropFromBoss()) applyDrop(d, enemy.x + (Math.random() * 20 - 10));
-    // Boss always heal already in dropFromBoss
-    setMsg('Boss倒 · 必掉加血 · ENTER过关', 2);
+    setMsg(isTwoPlayer(playerCount) ? 'Boss倒 · 双人各拿包 · ENTER过关' : 'Boss倒 · 必掉加血 · ENTER过关', 2);
   }
 
-  function onGruntDead(g) {
+  function onGruntDead(g, killer = p) {
     g.alive = false;
-    addScore(300);
+    addScoreTo(killer, 300);
     applyDrop(dropFromGrunt(), g.x);
     if (Math.random() < 0.35) applyDrop(spawnMoney(), g.x + 8);
   }
@@ -507,42 +620,125 @@ export function createPlay(opts) {
     }
 
     p.x += p.vx * dt;
-    p.x = Math.max(16, Math.min(W - 16, p.x));
 
-    // Ground heals — instant, not bag
+    if (p2 && p2.hp > 0 && input.p2) {
+      stepFighter(p2, input.p2, dt);
+    }
+
+    const xs = livingFighters().map((f) => f.x);
+    scrollX = trailingScrollX(xs.length ? xs : [p.x], W, COOP.worldW);
+    p.x = clampPlayerX(p.x, scrollX, W, COOP.worldW);
+    if (p2 && p2.hp > 0) p2.x = clampPlayerX(p2.x, scrollX, W, COOP.worldW);
+
+    pickupWorld(p);
+    if (p2 && p2.hp > 0) pickupWorld(p2);
+
+    for (const c of chests) {
+      if (c.open) continue;
+      for (const f of livingFighters()) {
+        if (Math.abs(c.x - f.x) < 12) {
+          c.open = true;
+          applyDrop(dropFromChest(), c.x);
+          break;
+        }
+      }
+    }
+
+    for (const f of livingFighters()) {
+      if (
+        enemy.alive &&
+        (enemy.stunT || 0) <= 0 &&
+        f.invulnT <= 0 &&
+        Math.abs(enemy.x - f.x) < 18 &&
+        Math.abs(enemy.y - f.y) < 16
+      ) {
+        if (!f.guarding) f.hp -= 10 * dt;
+      }
+    }
+
+    return { dead: p.hp <= 0 && (!p2 || p2.hp <= 0) };
+  }
+
+  function pickupWorld(fighter) {
     for (let i = groundHeals.length - 1; i >= 0; i--) {
       const h = groundHeals[i];
-      if (Math.abs(h.x - p.x) < 14 && Math.abs(h.y - (p.y + 20)) < 24) {
-        p.hp = Math.min(p.hpMax, p.hp + h.heal);
+      if (Math.abs(h.x - fighter.x) < 14 && Math.abs(h.y - (fighter.y + 20)) < 24) {
+        fighter.hp = Math.min(fighter.hpMax, fighter.hp + h.heal);
         setMsg(`${h.label} +${h.heal}HP`, 0.8);
         groundHeals.splice(i, 1);
       }
     }
-    // Money — score only
     for (let i = moneys.length - 1; i >= 0; i--) {
       const m = moneys[i];
-      if (Math.abs(m.x - p.x) < 14 && Math.abs(m.y - (p.y + 20)) < 24) {
-        addScore(m.score);
+      if (Math.abs(m.x - fighter.x) < 14 && Math.abs(m.y - (fighter.y + 20)) < 24) {
+        addScoreTo(fighter, m.score);
         setMsg(`${m.kind} +${m.score}`, 0.6);
         moneys.splice(i, 1);
       }
     }
-    // Walk into closed chest bump open
-    for (const c of chests) {
-      if (!c.open && Math.abs(c.x - p.x) < 12) {
-        c.open = true;
-        applyDrop(dropFromChest(), c.x);
+  }
+
+  function stepFighter(f, inp, dt) {
+    if (f.atkT > 0) f.atkT -= dt;
+    if (f.burstT > 0) f.burstT -= dt;
+    if (f.invulnT > 0) f.invulnT -= dt;
+    if (f.specialT > 0) f.specialT -= dt;
+
+    if (inp.abcTap && f.qiPips >= 1) {
+      f.qiPips -= 1;
+      f.burstT = 3.5;
+      f.invulnT = 0.35;
+      setMsg('2P 爆气', 0.6);
+    } else if (inp.aTap && f.atkT <= 0) {
+      const spd = atkSpeedMult(f.level);
+      f.atkT = 0.28 / spd;
+      f.atkKind = 'slash';
+      hitWorld(f.burstT > 0 ? 12 : 8, 28, null, f);
+    }
+
+    if (inp.bTap && !f.airborne && !inp.down) {
+      f.airborne = true;
+      f.vy = -220;
+    }
+    f.squatting = inp.down && !f.airborne;
+    f.guarding = inp.cHeld && (inp.right || inp.left);
+
+    if (inp.rightTap) {
+      if (t - f.lastRightT < 0.28) f.running = true;
+      f.lastRightT = t;
+      f.facing = 1;
+    }
+    if (inp.leftTap) {
+      if (t - f.lastLeftT < 0.28) f.running = true;
+      f.lastLeftT = t;
+      f.facing = -1;
+    }
+    if (!inp.right && !inp.left) f.running = false;
+
+    const speed = f.squatting ? 0 : f.running ? 140 : 70;
+    f.vx = 0;
+    if (inp.right && !f.guarding) {
+      f.vx = speed;
+      f.facing = 1;
+    } else if (inp.left && !f.guarding) {
+      f.vx = -speed;
+      f.facing = -1;
+    }
+    if (f.airborne) {
+      f.vy += 700 * dt;
+      f.y += f.vy * dt;
+      if (f.y >= 148) {
+        f.y = 148;
+        f.vy = 0;
+        f.airborne = false;
       }
     }
-
-    if (enemy.alive && (enemy.stunT || 0) <= 0 && p.invulnT <= 0 && Math.abs(enemy.x - p.x) < 18 && Math.abs(enemy.y - p.y) < 16) {
-      if (!p.guarding) p.hp -= 10 * dt;
-    }
-
-    return { dead: p.hp <= 0 };
+    f.x += f.vx * dt;
   }
 
   function draw(ctx, hud) {
+    ctx.save();
+    ctx.translate(-scrollX, 0);
     // chests
     for (const c of chests) {
       ctx.fillStyle = c.open ? '#403020' : '#8a5a20';
@@ -611,6 +807,13 @@ export function createPlay(opts) {
       ctx.fillRect(enemy.x - 10, enemy.y + 18, 20, 10);
     }
 
+    // P2 body
+    if (p2 && p2.hp > 0) {
+      ctx.fillStyle = p2.invulnT > 0 ? '#fff' : '#5080c0';
+      ctx.fillRect(p2.x - 10, p2.y, 20, 28);
+      drawText(ctx, '2P', p2.x, p2.y - 10, 6, '#a0c0e0', 'center');
+    }
+    ctx.restore();
     drawHud(ctx, hud);
 
     if (p.specialT > 0) drawText(ctx, p.specialName, W / 2, 78, 11, '#ffe080', 'center');
@@ -619,7 +822,7 @@ export function createPlay(opts) {
 
     drawText(
       ctx,
-      '分数升级 LV0–24 · 属性相克 · 道具威力≤LV20',
+      '2P：卷轴跟落后 · WASD+U攻击 · 分分各算',
       W / 2,
       212,
       6,
@@ -655,16 +858,27 @@ export function createPlay(opts) {
     ctx.fillStyle = '#d0a030';
     ctx.fillRect(86, 42, 48 * p.qiCharge, 5);
 
-    // P2 stub (empty)
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    ctx.fillRect(W - 100, 4, 96, 28);
-    drawText(ctx, '2P —', W - 52, 12, 7, '#506070', 'center');
+    if (p2) {
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(W - 172, 4, 168, 40);
+      const nm = hud.charName2 || '2P';
+      drawText(ctx, nm, W - 148, 6, 8, '#c8d8e8');
+      drawText(ctx, `命×${p2.lives} LV${p2.level}`, W - 148, 16, 7, '#a0b0c0');
+      ctx.fillStyle = '#203020';
+      ctx.fillRect(W - 148, 28, 100, 7);
+      ctx.fillStyle = '#40a0c0';
+      ctx.fillRect(W - 148, 28, 100 * Math.max(0, p2.hp / p2.hpMax), 7);
+      drawText(ctx, `S${p2.score}`, W - 8, 28, 6, '#a0c0e0', 'right');
+    } else {
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.fillRect(W - 100, 4, 96, 28);
+      drawText(ctx, '2P —', W - 52, 12, 7, '#506070', 'center');
+    }
 
-    drawText(ctx, `LV${p.level}  SCORE ${p.score}`, W - 8, 36, 7, '#e0d0a0', 'right');
-    const nxt = nextThreshold(p.level);
-    if (nxt != null) drawText(ctx, `下一档 ${nxt}`, W - 8, 46, 6, '#908060', 'right');
-    drawText(ctx, `CREDIT ${hud.credit}`, W - 8, 56, 7, '#c0a878', 'right');
-    if (p.burstT > 0) drawText(ctx, `爆气 ${p.burstT.toFixed(1)}`, W - 8, 66, 7, '#f0c040', 'right');
+    drawText(ctx, `1P LV${p.level}  ${p.score}`, W - 8, 48, 7, '#e0d0a0', 'right');
+    drawText(ctx, `CREDIT ${hud.credit}`, W - 8, 58, 7, '#c0a878', 'right');
+    if (p.burstT > 0) drawText(ctx, `爆气 ${p.burstT.toFixed(1)}`, W - 8, 68, 7, '#f0c040', 'right');
+    drawText(ctx, isTwoPlayer(playerCount) ? '卷轴跟落后 · 无友伤' : '', 8, 72, 6, '#607080');
     if (p.equippedSword) {
       const sw = p.bag.find((i) => i.id === p.equippedSword);
       drawText(ctx, sw ? sw.name : '', 8, 62, 7, '#f0a060');
@@ -745,7 +959,10 @@ export function createPlay(opts) {
     update,
     draw,
     get dead() {
-      return p.hp <= 0;
+      return p.hp <= 0 && (!p2 || p2.hp <= 0);
+    },
+    get playerCount() {
+      return playerCount;
     },
     get lives() {
       return p.lives;

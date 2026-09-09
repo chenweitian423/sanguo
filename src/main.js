@@ -8,7 +8,7 @@ const ctx = canvas.getContext('2d');
 const hintEl = document.getElementById('hint');
 
 hintEl.textContent =
-  '投币5/6 · Play：操作同前 · C道具栏 B翻页 D使用 · 地上鸡腿瞬回 · ENTER过关';
+  '投币5/6 · 标题1=1P / 2=2P · P2:WASD+U攻/I跳/O防 · 卷轴跟落后';
 
 const S = {
   TITLE: 'TitleCoin',
@@ -28,6 +28,10 @@ const g = {
   cursor: 0,
   charId: null,
   charName: '',
+  charId2: null,
+  charName2: '',
+  playerCount: 1,
+  pickSlot: 1, // 1 or 2 during CharSelect
   stageIndex: 0,
   introT: 0,
   clearT: 0,
@@ -79,7 +83,11 @@ window.addEventListener('keydown', (e) => {
   switch (g.state) {
     case S.TITLE:
       if (k === '1' || k === 'Enter') {
-        startRun();
+        startRun(1);
+        e.preventDefault();
+      }
+      if (k === '2') {
+        startRun(2);
         e.preventDefault();
       }
       break;
@@ -139,9 +147,14 @@ window.addEventListener('keyup', (e) => {
   held.delete(keyNorm(e));
 });
 
-function startRun() {
-  if (g.credit < 1) return;
-  g.credit -= 1;
+function startRun(players = 1) {
+  const need = players >= 2 ? 2 : 1;
+  if (g.credit < need) return;
+  g.credit -= need;
+  g.playerCount = players >= 2 ? 2 : 1;
+  g.pickSlot = 1;
+  g.charId2 = null;
+  g.charName2 = '';
   g.cursor = 0;
   g.stageIndex = 0;
   g.deaths = 0;
@@ -152,8 +165,19 @@ function startRun() {
 
 function confirmChar() {
   const c = ROSTER[g.cursor];
-  g.charId = c.id;
-  g.charName = c.name;
+  if (g.pickSlot === 1) {
+    g.charId = c.id;
+    g.charName = c.name;
+    if (g.playerCount >= 2) {
+      g.pickSlot = 2;
+      g.cursor = Math.min(1, ROSTER.length - 1);
+      return;
+    }
+    enterIntro();
+    return;
+  }
+  g.charId2 = c.id;
+  g.charName2 = c.name;
   enterIntro();
 }
 
@@ -164,7 +188,10 @@ function enterIntro() {
 
 function enterPlay() {
   g.state = S.PLAY;
-  play.reset(Math.max(1, 3 - g.deaths), g.charId, g.runFlags);
+  play.reset(Math.max(1, 3 - g.deaths), g.charId, g.runFlags, {
+    playerCount: g.playerCount,
+    charId2: g.charId2 || 'zhangfei',
+  });
 }
 
 function clearStage() {
@@ -240,6 +267,10 @@ function backToTitle() {
   g.state = S.TITLE;
   g.charId = null;
   g.charName = '';
+  g.charId2 = null;
+  g.charName2 = '';
+  g.playerCount = 1;
+  g.pickSlot = 1;
   g.stageIndex = 0;
   g.runFlags = emptyFlags();
 }
@@ -274,19 +305,30 @@ function drawTitle(dt) {
     color: '#ffe8a0',
   });
   if (Math.floor(g.blink * 2) % 2 === 0) {
-    text(g.credit > 0 ? '按 1 / ENTER 开始' : '投币 5 / 6', W / 2, 168, {
+    text(
+      g.credit >= 2 ? '1=1P · 2=2P · ENTER=1P' : g.credit > 0 ? '1 / ENTER = 1P（2P需2币）' : '投币 5 / 6',
+      W / 2,
+      168,
+      {
       size: 9,
       align: 'center',
       color: '#c0a878',
     });
   }
-  text('SAN-5～9 ·含 RunFlags', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
+  text('SAN-12 · 2P 落后锁卷轴', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
 }
 
 function drawChar() {
   fill('#10141c');
   text('选择武将', W / 2, 8, { size: 12, align: 'center', color: '#f0d090' });
-  text('十人全开', W / 2, 24, { size: 7, align: 'center', color: '#708090' });
+  text(
+    g.playerCount >= 2
+      ? `2P 模式 · 正在选 ${g.pickSlot === 1 ? '1P' : '2P'}（可同角）`
+      : '十人全开 · 可同角',
+    W / 2,
+    24,
+    { size: 7, align: 'center', color: '#708090' },
+  );
   const cols = 5;
   const cardW = 64;
   const cardH = 56;
@@ -329,7 +371,11 @@ function drawIntro() {
   text(`STAGE ${st.id}`, W / 2, 70, { size: 10, align: 'center', color: '#80a0c0' });
   text(st.name, W / 2, 96, { size: 18, align: 'center', color: '#f0e0b0' });
   text(st.blurb, W / 2, 124, { size: 8, align: 'center', color: '#90a0b0' });
-  text(`${g.charName} 出阵`, W / 2, 152, { size: 9, align: 'center', color: '#c0a060' });
+  const duo =
+    g.playerCount >= 2 && g.charName2
+      ? `${g.charName} + ${g.charName2} 出阵`
+      : `${g.charName} 出阵`;
+  text(duo, W / 2, 152, { size: 9, align: 'center', color: '#c0a060' });
 }
 
 function drawClear() {
@@ -466,12 +512,12 @@ function frame(now) {
         (held.has('a') || held.has('z') || held.has('j')) &&
         (held.has('b') || held.has('x') || held.has('k'));
       input.forwardA =
-        (pressed.has('a') || pressed.has('z') || pressed.has('j')) &&
+        (pressed.has('z') || pressed.has('j') || (g.playerCount < 2 && pressed.has('a'))) &&
         (held.has('ArrowRight') || held.has('ArrowLeft')) &&
         !input.abTap &&
         !input.abcTap;
       input.aTap =
-        (pressed.has('a') || pressed.has('z') || pressed.has('j')) &&
+        (pressed.has('z') || pressed.has('j') || (g.playerCount < 2 && pressed.has('a'))) &&
         !input.forwardA &&
         !input.abTap &&
         !input.abcTap;
@@ -481,6 +527,27 @@ function frame(now) {
       input.downTap = pressed.has('ArrowDown');
       if (held.has('ArrowDown') && input.bTap) {
         input.bTap = false;
+      }
+
+      // P2: WASD move, U attack, I jump, O guard/held, P use (unused stub)
+      if (g.playerCount >= 2) {
+        input.p2 = {
+          left: held.has('a'),
+          right: held.has('d'),
+          down: held.has('s'),
+          leftTap: pressed.has('a'),
+          rightTap: pressed.has('d'),
+          upTap: pressed.has('w'),
+          downTap: pressed.has('s'),
+          aTap: pressed.has('u'),
+          bTap: pressed.has('i'),
+          cTap: pressed.has('o'),
+          cHeld: held.has('o'),
+          dTap: pressed.has('p'),
+          abcTap: held.has('u') && held.has('i') && pressed.has('o'),
+          abTap: false,
+          forwardA: false,
+        };
       }
 
       play.update(input, dt);
@@ -506,7 +573,12 @@ function frame(now) {
       ctx.fillStyle = '#3a4850';
       ctx.fillRect(0, 160, W, 2);
       const st = STAGES[g.stageIndex];
-      play.draw(ctx, { stageName: st.name, charName: g.charName, credit: g.credit });
+      play.draw(ctx, {
+        stageName: st.name,
+        charName: g.charName,
+        charName2: g.charName2,
+        credit: g.credit,
+      });
       break;
     }
     case S.CLEAR:
