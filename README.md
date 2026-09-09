@@ -60,6 +60,7 @@ python3 -m http.server 8080
 - [SAN-13](https://linear.app/sanguo/issue/SAN-13/关1-截江救阿斗主路火书密孙姬)
 - [SAN-14](https://linear.app/sanguo/issue/SAN-14/关2-定军斩夏侯火剑密王平密双boss)
 - [SAN-15](https://linear.app/sanguo/issue/SAN-15/关3-威震汉中三boss冰剑密)
+- [SAN-16](https://linear.app/sanguo/issue/SAN-16/关4-大意失荆州吕蒙貂蝉灯门雷神锤)
 
 ## 道具掉落（SAN-10）
 
@@ -107,3 +108,8 @@ python3 -m http.server 8080
 - Boss：**孟优**(弱爆) → **夏侯惇**(弱电) → **张辽**(无)
 - 冰剑密：进门（宽松可不强制无名火）→ 打**第三尊石狮** → 开箱得**青缸**
 - 拿冰**不锁爆**（宽松）
+
+## 关4 大意失荆州（SAN-16）
+
+- Boss：**吕蒙**（撞×3 → 九节杖）
+- 支线：暗室**先左灯再右灯**开门 → **敌貂蝉** → 几案进老鹰密 → **雷神锤**
