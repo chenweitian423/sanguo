@@ -10,9 +10,9 @@ export const STAGE6 = {
       id: 'snow',
       teach: '雪道 · 无雨书灭火',
       grunts: [
-        { x: 240, hp: 22 },
-        { x: 280, hp: 22 },
-        { x: 320, hp: 22 },
+        { x: 240, hp: 22, type: 'rider' },
+        { x: 280, hp: 22, type: 'armor' },
+        { x: 320, hp: 22, type: 'leopard' },
       ],
       chest: { x: 220 },
     },

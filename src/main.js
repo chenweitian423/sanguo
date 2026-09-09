@@ -1,8 +1,16 @@
 import { ROSTER, STAGES, W, H, CONTINUE_SEC, INTRO_SEC } from './data.js';
 import { createPlay } from './play.js';
 import { movesFor } from './moves.js';
-import { emptyFlags, flagStrip, Gates, fourSwords } from './flags.js';
+import { emptyFlags, flagStrip, Gates, fourSwords, swordCount } from './flags.js';
 import { ACTIONS, loadBinds, saveBinds, resetBinds, keyLabel } from './binds.js';
+import { UI, drawUiText } from './ui.js';
+import {
+  playSfx,
+  playBgm,
+  unlockAudio,
+  tickContinue,
+  resetContinueTick,
+} from './audio.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -82,13 +90,17 @@ window.addEventListener('keydown', (e) => {
   }
 
   if (k === '5' || k === '6') {
+    unlockAudio();
     g.credit = Math.min(99, g.credit + 1);
+    playSfx('coin');
     e.preventDefault();
     return;
   }
   // C is coin on title only; in play C is item/guard — handle coin when not in PLAY/CHAR
   if (k === 'c' && g.state !== S.PLAY && g.state !== S.CHAR) {
+    unlockAudio();
     g.credit = Math.min(99, g.credit + 1);
+    playSfx('coin');
     e.preventDefault();
     return;
   }
@@ -222,8 +234,10 @@ function handleSettingsKey(k, e) {
 }
 
 function startRun(players = 1) {
+  unlockAudio();
   const need = players >= 2 ? 2 : 1;
   if (g.credit < need) return;
+  playSfx('menu');
   g.credit -= need;
   g.playerCount = players >= 2 ? 2 : 1;
   g.pickSlot = 1;
@@ -258,6 +272,7 @@ function confirmChar() {
 function enterIntro() {
   g.state = S.INTRO;
   g.introT = INTRO_SEC;
+  playBgm('stage');
 }
 
 function enterPlay() {
@@ -271,6 +286,7 @@ function enterPlay() {
 
 function clearStage() {
   g.clears += 1;
+  playSfx('stage_clear');
   // Stage clear demo pickups (SAN-9) — relaxed gates always allow
   const st = g.stageIndex + 1;
   if (st === 1) {
@@ -318,7 +334,9 @@ function clearStage() {
 function nextAfterClear() {
   if (g.stageIndex >= STAGES.length - 1) {
     g.state = S.ENDING;
-    g.endingT = 3;
+    g.endingT = 4.5;
+    playBgm('ending');
+    playSfx('stage_clear');
     return;
   }
   g.stageIndex += 1;
@@ -329,6 +347,8 @@ function die() {
   g.deaths += 1;
   g.state = S.CONTINUE;
   g.continueT = CONTINUE_SEC;
+  resetContinueTick();
+  playBgm('silence');
 }
 
 function doContinue() {
@@ -345,6 +365,7 @@ function gameOver() {
 
 function backToTitle() {
   g.state = S.TITLE;
+  playBgm('title');
   g.charId = null;
   g.charName = '';
   g.charId2 = null;
@@ -361,14 +382,48 @@ function fill(color) {
 }
 
 function text(str, x, y, opts = {}) {
-  const { size = 10, align = 'left', color = '#e8dcc8' } = opts;
-  ctx.font = `${size}px "PingFang SC","Microsoft YaHei",monospace`;
-  ctx.textAlign = align;
-  ctx.textBaseline = 'top';
-  ctx.fillStyle = '#000';
-  ctx.fillText(str, x + 1, y + 1);
-  ctx.fillStyle = color;
-  ctx.fillText(str, x, y);
+  drawUiText(ctx, str, x, y, {
+    size: opts.size != null ? opts.size : UI.body,
+    align: opts.align || 'left',
+    color: opts.color || '#e8dcc8',
+    stroke: opts.stroke != null ? opts.stroke : UI.stroke,
+  });
+}
+
+/** Ending / clear rating chips (神兵四绝 + cheap easter eggs). */
+function endingRatings() {
+  const flags = g.runFlags || emptyFlags();
+  /** @type {{ id: string, label: string, color: string }[]} */
+  const out = [];
+  if (fourSwords(flags)) out.push({ id: 'four_swords', label: '神兵四绝', color: '#f0c060' });
+  else if (swordCount(flags) >= 2) {
+    out.push({ id: 'swords', label: `神兵${swordCount(flags)}/4`, color: '#c0a878' });
+  }
+  if (flags.formation_cleared) out.push({ id: 'formation', label: '破阵完胜', color: '#80e0a0' });
+  if (flags.route_s7 === 'thunder') out.push({ id: 'thunder', label: '电道捷径', color: '#a0c0e0' });
+  if (flags.has_puppet) out.push({ id: 'puppet', label: '傀儡在握', color: '#c0a0e0' });
+  if (flags.has_leishenchui) out.push({ id: 'hammer', label: '雷神在手', color: '#80c0e0' });
+  if (g.deaths === 0 && g.clears > 0) out.push({ id: 'no_death', label: '无损通关', color: '#ffe0a0' });
+  if (g.clears >= STAGES.length) out.push({ id: 'all_clear', label: '七关归一', color: '#e0d0a0' });
+  if (!out.length) out.push({ id: 'clear', label: '乱世余烬', color: '#a0b0c0' });
+  return out;
+}
+
+function drawRatingStrip(ratings, y) {
+  const n = ratings.length;
+  const gap = 6;
+  const chipW = Math.min(72, Math.floor((W - 40 - gap * (n - 1)) / n));
+  const total = n * chipW + (n - 1) * gap;
+  let x = (W - total) / 2;
+  for (const r of ratings) {
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(x, y - 2, chipW, 16);
+    ctx.strokeStyle = r.color;
+    ctx.lineWidth = UI.stroke;
+    ctx.strokeRect(x + 0.5, y - 1.5, chipW - 1, 15);
+    text(r.label, x + chipW / 2, y + 1, { size: UI.hud, align: 'center', color: r.color });
+    x += chipW + gap;
+  }
 }
 
 function drawTitle(dt) {
@@ -376,11 +431,11 @@ function drawTitle(dt) {
   fill('#120e0c');
   ctx.fillStyle = 'rgba(0,0,0,0.15)';
   for (let y = 0; y < H; y += 2) ctx.fillRect(0, y, W, 1);
-  text('烽火三国', W / 2, 48, { size: 22, align: 'center', color: '#f0c060' });
-  text('FENGHUO SANGUO', W / 2, 74, { size: 8, align: 'center', color: '#8a7060' });
-  text('横版合作街机 · 384×224', W / 2, 96, { size: 8, align: 'center', color: '#a09080' });
+  text('烽火三国', W / 2, 44, { size: UI.logo, align: 'center', color: '#f0c060' });
+  text('FENGHUO SANGUO', W / 2, 74, { size: UI.hud, align: 'center', color: '#8a7060' });
+  text('横版合作街机 · 384×224', W / 2, 96, { size: UI.caption, align: 'center', color: '#a09080' });
   text(`CREDIT  ${String(g.credit).padStart(2, '0')}`, W / 2, 140, {
-    size: 10,
+    size: UI.body,
     align: 'center',
     color: '#ffe8a0',
   });
@@ -395,7 +450,7 @@ function drawTitle(dt) {
       color: '#c0a878',
     });
   }
-  text('Tab 键位 · SAN-19 关7终战', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
+  text('Tab 键位 · SAN-21 音效UI打磨', W / 2, 204, { size: UI.hudSm, align: 'center', color: '#5a5048' });
 }
 
 function drawSettings() {
@@ -458,7 +513,7 @@ function drawChar() {
     ctx.lineWidth = sel ? 2 : 1;
     ctx.strokeRect(x + 0.5, y + 0.5, cardW - 1, cardH - 1);
     text(c.name, x + cardW / 2, y + 20, {
-      size: 10,
+      size: UI.charName,
       align: 'center',
       color: sel ? '#fff0c0' : '#c8d0d8',
     });
@@ -477,14 +532,38 @@ function drawChar() {
 function drawIntro() {
   const st = STAGES[g.stageIndex];
   fill('#0c1018');
-  text(`STAGE ${st.id}`, W / 2, 70, { size: 10, align: 'center', color: '#80a0c0' });
-  text(st.name, W / 2, 96, { size: 18, align: 'center', color: '#f0e0b0' });
-  text(st.blurb, W / 2, 124, { size: 8, align: 'center', color: '#90a0b0' });
+  // vignette bars
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillRect(0, 0, W, 28);
+  ctx.fillRect(0, H - 28, W, 28);
+  // stage badge
+  const badge = `STAGE ${String(st.id).padStart(2, '0')}`;
+  const bw = 72;
+  ctx.fillStyle = '#1a2838';
+  ctx.fillRect(W / 2 - bw / 2, 48, bw, 16);
+  ctx.strokeStyle = '#80a0c0';
+  ctx.lineWidth = UI.stroke;
+  ctx.strokeRect(W / 2 - bw / 2 + 0.5, 48.5, bw - 1, 15);
+  text(badge, W / 2, 50, { size: UI.hud, align: 'center', color: '#a0c0e0' });
+  text(st.name, W / 2, 78, { size: UI.cardNameLg, align: 'center', color: '#f0e0b0' });
+  text(st.blurb, W / 2, 108, { size: UI.caption, align: 'center', color: '#90a0b0' });
   const duo =
     g.playerCount >= 2 && g.charName2
       ? `${g.charName} + ${g.charName2} 出阵`
       : `${g.charName} 出阵`;
-  text(duo, W / 2, 152, { size: 9, align: 'center', color: '#c0a060' });
+  text(duo, W / 2, 136, { size: UI.charName, align: 'center', color: '#c0a060' });
+  const remain = Math.max(0, g.introT);
+  text(remain > 0.35 ? 'START / ENTER 跳过' : '出阵…', W / 2, 168, {
+    size: UI.hud,
+    align: 'center',
+    color: '#607080',
+  });
+  // progress ticks
+  const t = Math.max(0, Math.min(1, 1 - g.introT / INTRO_SEC));
+  ctx.fillStyle = '#304050';
+  ctx.fillRect(W / 2 - 40, 188, 80, 3);
+  ctx.fillStyle = '#f0c060';
+  ctx.fillRect(W / 2 - 40, 188, 80 * t, 3);
 }
 
 function drawClear() {
@@ -502,19 +581,22 @@ function drawClear() {
   if (g._lastGateNote) {
     text(g._lastGateNote, W / 2, 154, { size: 6, align: 'center', color: '#a0c0a0' });
   }
-  if (fourSwords(g.runFlags)) {
-    text('评价：神兵四绝', W / 2, 172, { size: 9, align: 'center', color: '#f0c060' });
-  }
+  text('评价', W / 2, 158, { size: UI.hudSm, align: 'center', color: '#8090a0' });
+  drawRatingStrip(endingRatings().slice(0, 4), 172);
 }
 
 function drawContinue() {
   fill('#180808');
-  text('CONTINUE?', W / 2, 64, { size: 16, align: 'center', color: '#f06060' });
-  text(String(Math.ceil(g.continueT)), W / 2, 100, { size: 28, align: 'center', color: '#ffe0a0' });
-  text(`CREDIT ${g.credit}`, W / 2, 148, { size: 10, align: 'center', color: '#e0c080' });
-  text(flagStrip(g.runFlags), W / 2, 164, { size: 6, align: 'center', color: '#809060' });
+  text('CONTINUE?', W / 2, 64, { size: UI.countdownLg, align: 'center', color: '#f06060' });
+  text(String(Math.ceil(g.continueT)), W / 2, 96, {
+    size: UI.countdownXl,
+    align: 'center',
+    color: '#ffe0a0',
+  });
+  text(`CREDIT ${g.credit}`, W / 2, 148, { size: UI.body, align: 'center', color: '#e0c080' });
+  text(flagStrip(g.runFlags), W / 2, 164, { size: UI.micro, align: 'center', color: '#809060' });
   text(g.credit > 0 ? '1 / ENTER 续关（保留旗标）' : '请先投币 5/6', W / 2, 180, {
-    size: 8,
+    size: UI.caption,
     align: 'center',
     color: '#a09080',
   });
@@ -528,16 +610,39 @@ function drawGameOver() {
 
 function drawEnding() {
   fill('#101828');
-  text('ENDING', W / 2, 56, { size: 14, align: 'center', color: '#f0d080' });
-  text('曹操败北 · 占位', W / 2, 84, { size: 10, align: 'center', color: '#e8dcc8' });
-  text(g.charName + ' 通关', W / 2, 108, { size: 9, align: 'center', color: '#a0c0e0' });
-  text(flagStrip(g.runFlags), W / 2, 132, { size: 7, align: 'center', color: '#ffe8a0' });
-  text(
-    fourSwords(g.runFlags) ? '神兵四绝' : '四剑未齐（不挡通关）',
-    W / 2,
-    152,
-    { size: 9, align: 'center', color: fourSwords(g.runFlags) ? '#f0c060' : '#8090a0' },
-  );
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(0, 0, W, 24);
+  ctx.fillRect(0, H - 24, W, 24);
+  text('ENDING', W / 2, 28, { size: UI.banner, align: 'center', color: '#f0d080' });
+  text('曹操败北 · 三国归一', W / 2, 52, { size: UI.body, align: 'center', color: '#e8dcc8' });
+  const duo =
+    g.playerCount >= 2 && g.charName2
+      ? `${g.charName} · ${g.charName2} 通关`
+      : `${g.charName} 通关`;
+  text(duo, W / 2, 72, { size: UI.charName, align: 'center', color: '#a0c0e0' });
+  text(`通关 ${g.clears} · 死亡 ${g.deaths}`, W / 2, 90, {
+    size: UI.hud,
+    align: 'center',
+    color: '#8090a0',
+  });
+  text(flagStrip(g.runFlags), W / 2, 108, { size: UI.hudSm, align: 'center', color: '#ffe8a0' });
+  text('—— 评价 ——', W / 2, 128, { size: UI.hudSm, align: 'center', color: '#607080' });
+  const ratings = endingRatings();
+  drawRatingStrip(ratings.slice(0, 4), 144);
+  if (ratings.length > 4) drawRatingStrip(ratings.slice(4), 166);
+  if (fourSwords(g.runFlags)) {
+    text('四剑齐鸣 · 神兵四绝', W / 2, 190, {
+      size: UI.charName,
+      align: 'center',
+      color: '#f0c060',
+    });
+  } else {
+    text('四剑未齐（不挡通关）', W / 2, 190, {
+      size: UI.hud,
+      align: 'center',
+      color: '#8090a0',
+    });
+  }
 }
 
 function padDown(pad, action) {
@@ -610,6 +715,7 @@ function frame(now) {
       break;
     case S.CONTINUE:
       g.continueT -= dt;
+      tickContinue(g.continueT);
       if (g.continueT <= 0) gameOver();
       break;
     case S.GAMEOVER:
@@ -677,7 +783,8 @@ function frame(now) {
   }
 
   pressed.clear();
-  requestAnimationFrame(frame);
+  playBgm('title');
+requestAnimationFrame(frame);
 }
 
 requestAnimationFrame(frame);
