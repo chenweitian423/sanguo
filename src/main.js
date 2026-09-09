@@ -1,5 +1,6 @@
 import { ROSTER, STAGES, W, H, CONTINUE_SEC, INTRO_SEC } from './data.js';
 import { createPlay } from './play.js';
+import { movesFor } from './moves.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -174,7 +175,7 @@ function enterIntro() {
 
 function enterPlay() {
   g.state = S.PLAY;
-  play.reset(Math.max(1, 3 - g.deaths));
+  play.reset(Math.max(1, 3 - g.deaths), g.charId);
 }
 
 function clearStage() {
@@ -255,7 +256,7 @@ function drawTitle(dt) {
       color: '#c0a878',
     });
   }
-  text('SAN-5/6/7 流程·操作·HUD', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
+  text('SAN-5～8 流程·操作·HUD·出招', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
 }
 
 function drawChar() {
@@ -287,6 +288,15 @@ function drawChar() {
       color: sel ? '#fff0c0' : '#c8d0d8',
     });
   });
+  const sel = ROSTER[g.cursor];
+  const kit = movesFor(sel.id);
+  text(sel.name + ' · ' + kit.normals, W / 2, 178, { size: 8, align: 'center', color: '#c0b090' });
+  text(kit.specials.filter((m) => !m.burst).map((m) => m.label + m.name).join(' · '), W / 2, 192, {
+    size: 6,
+    align: 'center',
+    color: '#8090a0',
+  });
+  text(kit.burstNote, W / 2, 204, { size: 6, align: 'center', color: '#c09060' });
 }
 
 function drawIntro() {

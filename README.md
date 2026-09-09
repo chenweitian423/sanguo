@@ -4,7 +4,7 @@
 
 ## 当前进度
 
-**SAN-5/6/7**：流程 + 操作气 + HUD/三页道具栏（投掷·法宝·天书四剑）；加血地上瞬回。
+**SAN-5～8**：流程 + 操作气 + HUD/道具栏 + 十人指令技（↓↘→A 等，爆气加强版）。
 
 设定总表（Notion）与 Linear 项目见团队文档。本仓旧「乱世刀锋」原型已按需求覆盖。
 
@@ -51,3 +51,4 @@ python3 -m http.server 8080
 - [SAN-5](https://linear.app/sanguo/issue/SAN-5/流程骨架titlecoincharselectstagecontinuegameover)
 - [SAN-6](https://linear.app/sanguo/issue/SAN-6/操作与气119键位-易攒命中1珠)
 - [SAN-7](https://linear.app/sanguo/issue/SAN-7/hud-itempanel投掷法宝天书四剑)
+- [SAN-8](https://linear.app/sanguo/issue/SAN-8/10人角色骨架-出招表接入)

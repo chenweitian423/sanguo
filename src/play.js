@@ -1,5 +1,6 @@
 /** Play-field: controls, qi, HUD, ItemPanel (SAN-5/6/7). */
 import { PAGE_NAMES, PAGE_THROW, cloneBag } from './items.js';
+import { movesFor } from './moves.js';
 
 /**
  * @param {{ W: number, H: number }} opts
@@ -33,6 +34,10 @@ export function createPlay(opts) {
     cursor: 0,
     bag: cloneBag(),
     equippedSword: null,
+    charId: 'guanyu',
+    motionBuf: [],
+    specialName: '',
+    specialT: 0,
     msg: '',
     msgT: 0,
     lastRightT: -9,
@@ -57,7 +62,7 @@ export function createPlay(opts) {
     };
   }
 
-  function reset(lives = 3) {
+  function reset(lives = 3, charId = 'guanyu') {
     p.x = 80;
     p.y = 148;
     p.vx = 0;
@@ -79,6 +84,10 @@ export function createPlay(opts) {
     p.cursor = 0;
     p.bag = cloneBag();
     p.equippedSword = null;
+    p.charId = charId || 'guanyu';
+    p.motionBuf = [];
+    p.specialName = '';
+    p.specialT = 0;
     enemy = spawnEnemy(true);
     groundHeals = [
       { x: 160, y: 168, heal: 25, label: '鸡腿' },
@@ -103,6 +112,79 @@ export function createPlay(opts) {
     } else {
       p.qiCharge = Math.min(1, p.qiCharge + 0.15);
     }
+  }
+
+
+  function pushMotion(dir) {
+    const now = t;
+    p.motionBuf.push({ d: dir, t: now });
+    p.motionBuf = p.motionBuf.filter((m) => now - m.t < 0.5);
+  }
+
+  function motionStr() {
+    return p.motionBuf.map((m) => m.d).join('');
+  }
+
+  function matchSpecial() {
+    const kit = movesFor(p.charId);
+    const s = motionStr();
+    const burstOn = p.burstT > 0;
+    // prefer burst moves when bursting
+    const ordered = [...kit.specials].sort((a, b) => {
+      if (burstOn) return (b.burst ? 1 : 0) - (a.burst ? 1 : 0);
+      return (a.burst ? 1 : 0) - (b.burst ? 1 : 0);
+    });
+    for (const mv of ordered) {
+      if (mv.burst && !burstOn) continue;
+      if (mv.motion === '6A') continue; // handled as forward+A
+      if (mv.motion === '236' && (s.endsWith('236') || s.endsWith('26') || s.endsWith('2236') || s.endsWith('266'))) return mv;
+      if (mv.motion === '28' && (s.endsWith('28') || s.endsWith('218') || s.endsWith('248'))) return mv;
+      if (mv.motion === '46' && (s.endsWith('46') || s.endsWith('456') || s.endsWith('446'))) return mv;
+      if (mv.motion === '22' && (s.endsWith('22') || s.endsWith('222'))) return mv;
+    }
+    return null;
+  }
+
+  function trySpecialOrAttack(kindFallback) {
+    const mv = matchSpecial();
+    if (mv) {
+      fireSpecial(mv);
+      return;
+    }
+    if (kindFallback === 'heavy') {
+      const kit = movesFor(p.charId);
+      const six = kit.specials.find((m) => m.motion === '6A' && (!m.burst || p.burstT > 0));
+      if (six) {
+        fireSpecial(six);
+        return;
+      }
+    }
+    tryAttack(kindFallback);
+  }
+
+  function fireSpecial(mv) {
+    if (p.atkT > 0 || p.panelOpen) return;
+    p.atkKind = 'special';
+    p.atkT = 0.45;
+    p.specialName = mv.name;
+    p.specialT = 0.9;
+    p.motionBuf = [];
+    let dmg = mv.dmg;
+    if (p.equippedSword) dmg *= 1.2;
+    if (p.burstT > 0) dmg *= mv.burst ? 1.15 : 1.25;
+    const reach = mv.reach;
+    if (enemy.alive) {
+      const dx = (enemy.x - p.x) * p.facing;
+      // ranged specials (reach>70) ignore facing gap somewhat
+      const ok = reach > 70 ? Math.abs(enemy.x - p.x) < reach : dx > 0 && dx < reach;
+      if (ok && Math.abs(enemy.y - p.y) < 24) {
+        enemy.hp -= dmg;
+        enemy.hitFlash = 0.2;
+        gainPipFromHit();
+        if (enemy.hp <= 0) onEnemyDead();
+      }
+    }
+    setMsg(`${mv.label} ${mv.name}`, 0.9);
   }
 
   function tryAttack(kind) {
@@ -199,6 +281,7 @@ export function createPlay(opts) {
   function update(input, dt) {
     t += dt;
     if (p.msgT > 0) p.msgT -= dt;
+    if (p.specialT > 0) p.specialT -= dt;
     if (p.atkT > 0) p.atkT -= dt;
     if (p.burstT > 0) p.burstT -= dt;
     else p.bookBoost = false;
@@ -225,14 +308,20 @@ export function createPlay(opts) {
       return { dead: p.hp <= 0 };
     }
 
+    // motion buffer from directions
+    if (input.downTap) pushMotion('2');
+    if (input.upTap) pushMotion('8');
+    if (input.leftTap) pushMotion('4');
+    if (input.rightTap) pushMotion('6');
+
     if (input.abcTap) startBurst();
     else if (input.abTap) bloodKill();
-    else if (input.forwardA) tryAttack('heavy');
+    else if (input.forwardA) trySpecialOrAttack('heavy');
     else if (input.aTap) {
       if (p.guarding) {
         setMsg('防反击', 0.5);
         tryAttack('slash');
-      } else tryAttack('slash');
+      } else trySpecialOrAttack('slash');
     }
 
     if (input.bTap && !p.airborne && !input.down) {
@@ -306,7 +395,8 @@ export function createPlay(opts) {
     }
 
     // player
-    ctx.fillStyle = p.burstT > 0 ? '#f0c040' : '#c08040';
+    const kit = movesFor(p.charId);
+    ctx.fillStyle = p.burstT > 0 ? '#f0c040' : kit.color;
     if (p.invulnT > 0 && Math.floor(t * 20) % 2) ctx.globalAlpha = 0.4;
     const pw = 14;
     const ph = p.squatting ? 18 : 28;
@@ -347,11 +437,13 @@ export function createPlay(opts) {
 
     drawHud(ctx, hud);
 
+    if (p.specialT > 0) drawText(ctx, p.specialName, W / 2, 78, 11, '#ffe080', 'center');
     if (p.msgT > 0) drawText(ctx, p.msg, W / 2, 92, 9, '#fff0c0', 'center');
+    drawText(ctx, kit.normals + ' · ' + kit.burstNote, W / 2, 200, 5.5, '#607080', 'center');
 
     drawText(
       ctx,
-      'C栏 B翻页 D用 · 地上鸡腿瞬回 · ENTER过关',
+      '指令↓↘→A等 · C栏B翻页 · ENTER过关',
       W / 2,
       212,
       6,
