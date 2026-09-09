@@ -2,6 +2,7 @@
 import { PAGE_NAMES, PAGE_THROW, cloneBag } from './items.js';
 import { movesFor } from './moves.js';
 import { applySwordFlag, flagStrip, Gates } from './flags.js';
+import { dropFromGrunt, dropFromChest, dropFromBoss, spawnMoney } from './drops.js';
 
 /**
  * @param {{ W: number, H: number }} opts
@@ -39,6 +40,7 @@ export function createPlay(opts) {
     motionBuf: [],
     specialName: '',
     specialT: 0,
+    score: 0,
     msg: '',
     msgT: 0,
     lastRightT: -9,
@@ -48,6 +50,12 @@ export function createPlay(opts) {
   let enemy = spawnEnemy(true);
   /** @type {{ x: number, y: number, heal: number, label: string }[]} */
   let groundHeals = [];
+  /** @type {any[]} */
+  let grunts = [];
+  /** @type {any[]} */
+  let chests = [];
+  /** @type {any[]} */
+  let moneys = [];
   let t = 0;
 
   function spawnEnemy(bossLike) {
@@ -57,6 +65,7 @@ export function createPlay(opts) {
       hp: bossLike ? 80 : 40,
       hpMax: bossLike ? 80 : 40,
       hitFlash: 0,
+      stunT: 0,
       alive: true,
       isBoss: !!bossLike,
       name: bossLike ? '木桩校尉' : '杂兵',
@@ -107,11 +116,40 @@ export function createPlay(opts) {
       if (p.runFlags.has_fire) p.equippedSword = p.equippedSword || 'sword_fire';
     }
 
-    groundHeals = [
-      { x: 160, y: 168, heal: 25, label: '鸡腿' },
-      { x: 200, y: 168, heal: 15, label: '包子' },
+    groundHeals = [];
+    grunts = [
+      { x: 200, y: 148, hp: 18, hpMax: 18, alive: true, stunT: 0 },
+      { x: 240, y: 148, hp: 18, hpMax: 18, alive: true, stunT: 0 },
+      { x: 220, y: 148, hp: 18, hpMax: 18, alive: true, stunT: 0 },
     ];
+    chests = [{ x: 120, y: 156, open: false }];
+    moneys = [];
+    p.score = p.score || 0;
     t = 0;
+  }
+
+  function addBagItem(itemId, qty = 1) {
+    const it = p.bag.find((x) => x.id === itemId);
+    if (!it) return;
+    if (it.kind === 'sword') {
+      it.held = true;
+      if (p.runFlags) applySwordFlag(p.runFlags, itemId);
+      return;
+    }
+    it.qty = (it.qty || 0) + qty;
+  }
+
+  function applyDrop(d, atX) {
+    if (!d) return;
+    if (d.type === 'heal') {
+      groundHeals.push({ x: atX, y: 168, heal: d.heal, label: d.label });
+    } else if (d.type === 'bag') {
+      addBagItem(d.itemId, d.qty || 1);
+      const it = p.bag.find((x) => x.id === d.itemId);
+      setMsg(`获得 ${it ? it.name : d.itemId}`, 0.7);
+    } else if (d.type === 'money') {
+      moneys.push({ x: atX, y: 168, ...d });
+    }
   }
 
   function setMsg(s, dur = 1.2) {
@@ -190,18 +228,7 @@ export function createPlay(opts) {
     let dmg = mv.dmg;
     if (p.equippedSword) dmg *= 1.2;
     if (p.burstT > 0) dmg *= mv.burst ? 1.15 : 1.25;
-    const reach = mv.reach;
-    if (enemy.alive) {
-      const dx = (enemy.x - p.x) * p.facing;
-      // ranged specials (reach>70) ignore facing gap somewhat
-      const ok = reach > 70 ? Math.abs(enemy.x - p.x) < reach : dx > 0 && dx < reach;
-      if (ok && Math.abs(enemy.y - p.y) < 24) {
-        enemy.hp -= dmg;
-        enemy.hitFlash = 0.2;
-        gainPipFromHit();
-        if (enemy.hp <= 0) onEnemyDead();
-      }
-    }
+    hitWorld(dmg, mv.reach);
     setMsg(`${mv.label} ${mv.name}`, 0.9);
   }
 
@@ -210,26 +237,63 @@ export function createPlay(opts) {
     p.atkKind = kind;
     p.atkT = kind === 'slash' ? 0.28 : kind === 'heavy' ? 0.4 : kind === 'blood' ? 0.35 : 0.3;
     const reach = kind === 'heavy' ? 36 : 28;
+    let dmg = kind === 'heavy' ? 14 : kind === 'blood' ? 18 : p.burstT > 0 ? 12 : 8;
+    if (p.equippedSword) dmg *= 1.25;
+    if (p.bookBoost && p.burstT > 0) dmg *= 1.5;
+    hitWorld(dmg, reach);
+  }
+
+  function hitWorld(dmg, reach) {
+    let hit = false;
     if (enemy.alive) {
       const dx = (enemy.x - p.x) * p.facing;
-      if (dx > 0 && dx < reach && Math.abs(enemy.y - p.y) < 20) {
-        let dmg = kind === 'heavy' ? 14 : kind === 'blood' ? 18 : p.burstT > 0 ? 12 : 8;
-        if (p.equippedSword) dmg *= 1.25;
-        if (p.bookBoost && p.burstT > 0) dmg *= 1.5;
+      const ok = reach > 70 ? Math.abs(enemy.x - p.x) < reach : dx > 0 && dx < reach;
+      if (ok && Math.abs(enemy.y - p.y) < 24) {
         enemy.hp -= dmg;
         enemy.hitFlash = 0.15;
-        gainPipFromHit();
+        hit = true;
         if (enemy.hp <= 0) onEnemyDead();
       }
     }
+    for (const g of grunts) {
+      if (!g.alive) continue;
+      const dx = (g.x - p.x) * p.facing;
+      const ok = reach > 70 ? Math.abs(g.x - p.x) < reach : dx > 0 && dx < reach;
+      if (ok && Math.abs(g.y - p.y) < 24) {
+        g.hp -= dmg;
+        hit = true;
+        if (g.hp <= 0) onGruntDead(g);
+      }
+    }
+    // open chest by attack
+    for (const c of chests) {
+      if (c.open) continue;
+      if (Math.abs(c.x - p.x) < reach && Math.abs(c.y - p.y) < 30) {
+        c.open = true;
+        applyDrop(dropFromChest(), c.x);
+        hit = true;
+        setMsg('开箱', 0.5);
+      }
+    }
+    if (hit) gainPipFromHit();
   }
 
   function onEnemyDead() {
     enemy.alive = false;
     enemy.hp = 0;
-    groundHeals.push({ x: enemy.x, y: 168, heal: 35, label: '鸡腿' });
-    setMsg('敌倒 · 加血落地 · ENTER 过关', 2);
+    p.score += 900;
+    for (const d of dropFromBoss()) applyDrop(d, enemy.x + (Math.random() * 20 - 10));
+    // Boss always heal already in dropFromBoss
+    setMsg('Boss倒 · 必掉加血 · ENTER过关', 2);
   }
+
+  function onGruntDead(g) {
+    g.alive = false;
+    p.score += 300;
+    applyDrop(dropFromGrunt(), g.x);
+    if (Math.random() < 0.35) applyDrop(spawnMoney(), g.x + 8);
+  }
+
 
   function startBurst() {
     if (p.qiPips < 1 || p.panelOpen) return;
@@ -275,10 +339,19 @@ export function createPlay(opts) {
     p.bookBoost = p.burstT > 0 && it.kind === 'book';
 
     if (it.kind === 'stun') {
+      // 傀儡 = 定身，非助战（SAN-10）
+      let any = false;
       if (enemy.alive) {
-        enemy.hitFlash = 1.2;
-        setMsg('傀儡定身', 1);
+        enemy.hitFlash = 1.5;
+        enemy.stunT = 2.5;
+        any = true;
       }
+      for (const g of grunts) {
+        if (!g.alive) continue;
+        g.stunT = 2.5;
+        any = true;
+      }
+      setMsg(any ? '傀儡定身（非助战）' : '附近无敌人', 1);
     } else if (enemy.alive) {
       let base = it.kind === 'book' ? 22 : it.kind === 'treasure' ? 18 : 10;
       if (p.bookBoost) base *= 1.6;
@@ -306,6 +379,10 @@ export function createPlay(opts) {
     if (p.invulnT > 0) p.invulnT -= dt;
     if (p.fxFlash > 0) p.fxFlash -= dt;
     if (enemy.hitFlash > 0) enemy.hitFlash -= dt;
+    if (enemy.stunT > 0) enemy.stunT -= dt;
+    for (const g of grunts) {
+      if (g.stunT > 0) g.stunT -= dt;
+    }
 
     if (input.cTap && !input.left && !input.right) {
       p.panelOpen = !p.panelOpen;
@@ -394,8 +471,24 @@ export function createPlay(opts) {
         groundHeals.splice(i, 1);
       }
     }
+    // Money — score only
+    for (let i = moneys.length - 1; i >= 0; i--) {
+      const m = moneys[i];
+      if (Math.abs(m.x - p.x) < 14 && Math.abs(m.y - (p.y + 20)) < 24) {
+        p.score += m.score;
+        setMsg(`${m.kind} +${m.score}`, 0.6);
+        moneys.splice(i, 1);
+      }
+    }
+    // Walk into closed chest bump open
+    for (const c of chests) {
+      if (!c.open && Math.abs(c.x - p.x) < 12) {
+        c.open = true;
+        applyDrop(dropFromChest(), c.x);
+      }
+    }
 
-    if (enemy.alive && p.invulnT <= 0 && Math.abs(enemy.x - p.x) < 18 && Math.abs(enemy.y - p.y) < 16) {
+    if (enemy.alive && (enemy.stunT || 0) <= 0 && p.invulnT <= 0 && Math.abs(enemy.x - p.x) < 18 && Math.abs(enemy.y - p.y) < 16) {
       if (!p.guarding) p.hp -= 10 * dt;
     }
 
@@ -403,6 +496,18 @@ export function createPlay(opts) {
   }
 
   function draw(ctx, hud) {
+    // chests
+    for (const c of chests) {
+      ctx.fillStyle = c.open ? '#403020' : '#8a5a20';
+      ctx.fillRect(c.x - 10, c.y, 20, 14);
+      if (!c.open) drawText(ctx, '箱', c.x, c.y - 10, 6, '#c0a060', 'center');
+    }
+    // grunts
+    for (const g of grunts) {
+      if (!g.alive) continue;
+      ctx.fillStyle = '#606878';
+      ctx.fillRect(g.x - 8, g.y + 4, 16, 24);
+    }
     // ground heals
     for (const h of groundHeals) {
       ctx.fillStyle = '#e8a050';
@@ -410,6 +515,12 @@ export function createPlay(opts) {
       ctx.arc(h.x, h.y, 6, 0, Math.PI * 2);
       ctx.fill();
       drawText(ctx, h.label, h.x, h.y - 12, 6, '#f0c080', 'center');
+    }
+    // money
+    for (const m of moneys) {
+      ctx.fillStyle = m.color;
+      ctx.fillRect(m.x - 4, m.y - 4, 8, 8);
+      drawText(ctx, m.kind, m.x, m.y - 14, 6, m.color, 'center');
     }
 
     // player
@@ -461,7 +572,7 @@ export function createPlay(opts) {
 
     drawText(
       ctx,
-      '指令↓↘→A等 · C栏B翻页 · ENTER过关',
+      '清兵掉投掷 · 箱掉法宝 · Boss必掉加血 · 金钱加分',
       W / 2,
       212,
       6,
@@ -502,8 +613,9 @@ export function createPlay(opts) {
     ctx.fillRect(W - 100, 4, 96, 28);
     drawText(ctx, '2P —', W - 52, 12, 7, '#506070', 'center');
 
-    drawText(ctx, `CREDIT ${hud.credit}`, W - 8, 36, 7, '#c0a878', 'right');
-    if (p.burstT > 0) drawText(ctx, `爆气 ${p.burstT.toFixed(1)}`, W - 8, 46, 7, '#f0c040', 'right');
+    drawText(ctx, `SCORE ${p.score}`, W - 8, 36, 7, '#e0d0a0', 'right');
+    drawText(ctx, `CREDIT ${hud.credit}`, W - 8, 46, 7, '#c0a878', 'right');
+    if (p.burstT > 0) drawText(ctx, `爆气 ${p.burstT.toFixed(1)}`, W - 8, 56, 7, '#f0c040', 'right');
     if (p.equippedSword) {
       const sw = p.bag.find((i) => i.id === p.equippedSword);
       drawText(ctx, sw ? sw.name : '', 8, 62, 7, '#f0a060');
@@ -588,6 +700,9 @@ export function createPlay(opts) {
     },
     get lives() {
       return p.lives;
+    },
+    get score() {
+      return p.score;
     },
   };
 }

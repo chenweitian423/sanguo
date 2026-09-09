@@ -53,3 +53,12 @@ python3 -m http.server 8080
 - [SAN-7](https://linear.app/sanguo/issue/SAN-7/hud-itempanel投掷法宝天书四剑)
 - [SAN-8](https://linear.app/sanguo/issue/SAN-8/10人角色骨架-出招表接入)
 - [SAN-9](https://linear.app/sanguo/issue/SAN-9/runflags-状态机-宽松门控)
+- [SAN-10](https://linear.app/sanguo/issue/SAN-10/道具掉落清兵箱boss加血-傀儡定身)
+
+## 道具掉落（SAN-10）
+
+- 清兵：约 55% 掉普通投掷进栏；有概率掉金钱（只加分）
+- 木箱：攻击/靠近打开 → 普通投掷或高级法宝
+- Boss：必掉加血地上物（鸡腿/包子/酒壶），捡起瞬回；有概率再掉法宝
+- 傀儡：定身（非助战），不召唤助战单位
+- 金钱：铜 100 / 银 500 / 金 2000，不进道具栏
