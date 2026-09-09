@@ -102,7 +102,7 @@ export const STAGE5 = {
     {
       id: 'shamoke',
       name: '沙摩柯',
-      hp: 160,
+      hp: 187,
       x: 900,
       y: 148,
       weak: ['冰'],
@@ -111,7 +111,7 @@ export const STAGE5 = {
     {
       id: 'lubu',
       name: '吕布',
-      hp: 220,
+      hp: 240,
       x: 1050,
       y: 148,
       weak: ['火'],
@@ -125,7 +125,7 @@ export const STAGE5 = {
     {
       id: 'luxun',
       name: '陆逊',
-      hp: 150,
+      hp: 147,
       x: 1180,
       y: 148,
       weak: [],
@@ -134,7 +134,7 @@ export const STAGE5 = {
     {
       id: 'zuoci',
       name: '左慈',
-      hp: 180,
+      hp: 213,
       x: 1300,
       y: 148,
       weak: ['火'],

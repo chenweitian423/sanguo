@@ -57,7 +57,7 @@ export const STAGE7 = {
     {
       id: 'yueji',
       name: '越吉',
-      hp: 160,
+      hp: 173,
       x: 900,
       y: 148,
       weak: ['电'],
@@ -66,7 +66,7 @@ export const STAGE7 = {
     {
       id: 'weiyan',
       name: '魏延',
-      hp: 170,
+      hp: 200,
       x: 1040,
       y: 148,
       weak: ['电'],
@@ -75,7 +75,7 @@ export const STAGE7 = {
     {
       id: 'simayi',
       name: '司马懿',
-      hp: 200,
+      hp: 240,
       x: 1180,
       y: 148,
       weak: ['冰', '爆'],
@@ -85,7 +85,7 @@ export const STAGE7 = {
     {
       id: 'caocao',
       name: '曹操',
-      hp: 260,
+      hp: 320,
       x: 1360,
       y: 148,
       weak: ['电'],
@@ -98,7 +98,7 @@ export const STAGE7 = {
     {
       id: 'simayi',
       name: '司马懿',
-      hp: 200,
+      hp: 240,
       x: 1000,
       y: 148,
       weak: ['冰', '爆'],
@@ -108,7 +108,7 @@ export const STAGE7 = {
     {
       id: 'caocao',
       name: '曹操',
-      hp: 260,
+      hp: 320,
       x: 1200,
       y: 148,
       weak: ['电'],

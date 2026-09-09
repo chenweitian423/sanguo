@@ -85,7 +85,7 @@ export const STAGE2 = {
     {
       id: 'cheliji',
       name: '彻里吉',
-      hp: 140,
+      hp: 133,
       x: 880,
       y: 148,
       weak: ['电'],
@@ -95,7 +95,7 @@ export const STAGE2 = {
     {
       id: 'xiahouyuan',
       name: '夏侯渊',
-      hp: 180,
+      hp: 187,
       x: 1040,
       y: 148,
       weak: ['火'],

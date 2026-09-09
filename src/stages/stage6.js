@@ -66,7 +66,7 @@ export const STAGE6 = {
     {
       id: 'xuchu',
       name: '许褚',
-      hp: 200,
+      hp: 227,
       x: 980,
       y: 148,
       weak: ['毒'],
@@ -75,7 +75,7 @@ export const STAGE6 = {
     {
       id: 'menghuo',
       name: '孟获',
-      hp: 170,
+      hp: 187,
       x: 1120,
       y: 148,
       weak: ['爆'],
@@ -85,7 +85,7 @@ export const STAGE6 = {
     {
       id: 'huanggai',
       name: '黄盖',
-      hp: 180,
+      hp: 208,
       x: 1260,
       y: 148,
       weak: ['冰'],
