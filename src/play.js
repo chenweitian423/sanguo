@@ -1,6 +1,7 @@
 /** Play-field: controls, qi, HUD, ItemPanel (SAN-5/6/7). */
 import { PAGE_NAMES, PAGE_THROW, cloneBag } from './items.js';
 import { movesFor } from './moves.js';
+import { applySwordFlag, flagStrip, Gates } from './flags.js';
 
 /**
  * @param {{ W: number, H: number }} opts
@@ -62,7 +63,7 @@ export function createPlay(opts) {
     };
   }
 
-  function reset(lives = 3, charId = 'guanyu') {
+  function reset(lives = 3, charId = 'guanyu', runFlags = null) {
     p.x = 80;
     p.y = 148;
     p.vx = 0;
@@ -85,10 +86,27 @@ export function createPlay(opts) {
     p.bag = cloneBag();
     p.equippedSword = null;
     p.charId = charId || 'guanyu';
+    p.runFlags = runFlags;
     p.motionBuf = [];
     p.specialName = '';
     p.specialT = 0;
     enemy = spawnEnemy(true);
+    if (p.runFlags) {
+      const map = [
+        ['has_fire', 'sword_fire'],
+        ['has_ice', 'sword_ice'],
+        ['has_thunder', 'sword_thunder'],
+        ['has_boom', 'sword_boom'],
+      ];
+      for (const [fk, sid] of map) {
+        if (p.runFlags[fk]) {
+          const it = p.bag.find((x) => x.id === sid);
+          if (it) it.held = true;
+        }
+      }
+      if (p.runFlags.has_fire) p.equippedSword = p.equippedSword || 'sword_fire';
+    }
+
     groundHeals = [
       { x: 160, y: 168, heal: 25, label: '鸡腿' },
       { x: 200, y: 168, heal: 15, label: '包子' },
@@ -236,13 +254,13 @@ export function createPlay(opts) {
     }
     const it = items[Math.min(p.cursor, items.length - 1)];
     if (it.kind === 'sword') {
-      if (it.held) {
-        p.equippedSword = it.id;
-        setMsg(`装备 ${it.name}`, 0.8);
+      it.held = true;
+      p.equippedSword = it.id;
+      if (p.runFlags) {
+        applySwordFlag(p.runFlags, it.id);
+        const both = Gates.canHoldIceAndBoom();
+        setMsg(`取得 ${it.name} · ${both.reason}`, 1.0);
       } else {
-        // demo: pick up sword into held
-        it.held = true;
-        p.equippedSword = it.id;
         setMsg(`取得 ${it.name}`, 0.8);
       }
       p.panelOpen = false;
@@ -505,6 +523,7 @@ export function createPlay(opts) {
     }
 
     drawText(ctx, hud.stageName, 8, H - 12, 6, '#8090a0');
+    if (p.runFlags) drawText(ctx, flagStrip(p.runFlags), W - 8, H - 12, 5.5, '#a09070', 'right');
   }
 
   function drawPanel(ctx) {

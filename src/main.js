@@ -1,6 +1,7 @@
 import { ROSTER, STAGES, W, H, CONTINUE_SEC, INTRO_SEC } from './data.js';
 import { createPlay } from './play.js';
 import { movesFor } from './moves.js';
+import { emptyFlags, flagStrip, Gates, fourSwords } from './flags.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -20,19 +21,6 @@ const S = {
   ENDING: 'Ending',
 };
 
-function emptyFlags() {
-  return {
-    has_fire_book: false,
-    has_puppet: false,
-    has_fire: false,
-    has_ice: false,
-    has_thunder: false,
-    has_boom: false,
-    has_heshi: false,
-    has_leishenchui: false,
-  };
-}
-
 const g = {
   state: S.TITLE,
   credit: 0,
@@ -49,6 +37,7 @@ const g = {
   runFlags: emptyFlags(),
   deaths: 0,
   clears: 0,
+  _lastGateNote: '',
 };
 
 const play = createPlay({ W, H });
@@ -175,13 +164,48 @@ function enterIntro() {
 
 function enterPlay() {
   g.state = S.PLAY;
-  play.reset(Math.max(1, 3 - g.deaths), g.charId);
+  play.reset(Math.max(1, 3 - g.deaths), g.charId, g.runFlags);
 }
 
 function clearStage() {
   g.clears += 1;
+  // Stage clear demo pickups (SAN-9) — relaxed gates always allow
+  const st = g.stageIndex + 1;
+  if (st === 1) {
+    g.runFlags.has_fire_book = true;
+    g.runFlags.has_puppet = true;
+    Gates.enterFireBookVault();
+  }
+  if (st === 2) {
+    g.runFlags.has_fire = true;
+    g.runFlags.has_nameless_fire = true;
+    g.runFlags.has_general_seal = true;
+    Gates.enterFireSwordVault();
+  }
+  if (st === 3) {
+    g.runFlags.has_ice = true;
+    Gates.canHoldIceAndBoom();
+  }
+  if (st === 4) {
+    g.runFlags.has_leishenchui = true;
+    g.runFlags.has_jiujiezhang = true;
+  }
+  if (st === 5) {
+    g.runFlags.has_thunder = true;
+    g.runFlags.has_heshi = true;
+  }
+  if (st === 6) {
+    const g6 = Gates.enterBoomVault(g.runFlags);
+    g.runFlags.has_boom = true;
+    g._lastGateNote = g6.reason;
+  }
+  if (st === 7) {
+    const th = Gates.enterThunderRoute(g.runFlags);
+    if (th.ok) g.runFlags.route_s7 = 'thunder';
+    g._lastGateNote = th.ok ? th.reason : '主路越吉→魏延（无锤）';
+  }
   g.state = S.CLEAR;
-  g.clearT = 1.5;
+  g.clearT = 2.2;
 }
 
 function nextAfterClear() {
@@ -256,7 +280,7 @@ function drawTitle(dt) {
       color: '#c0a878',
     });
   }
-  text('SAN-5～8 流程·操作·HUD·出招', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
+  text('SAN-5～9 ·含 RunFlags', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
 }
 
 function drawChar() {
@@ -311,13 +335,21 @@ function drawIntro() {
 function drawClear() {
   const st = STAGES[g.stageIndex];
   fill('#101820');
-  text('STAGE CLEAR', W / 2, 72, { size: 14, align: 'center', color: '#80e0a0' });
-  text(st.name, W / 2, 100, { size: 11, align: 'center', color: '#e8dcc8' });
-  text(`通关 ${g.clears} · 死亡 ${g.deaths}`, W / 2, 128, {
+  text('STAGE CLEAR', W / 2, 56, { size: 14, align: 'center', color: '#80e0a0' });
+  text(st.name, W / 2, 80, { size: 11, align: 'center', color: '#e8dcc8' });
+  text(`通关 ${g.clears} · 死亡 ${g.deaths}`, W / 2, 100, {
     size: 8,
     align: 'center',
     color: '#90a0b0',
   });
+  text('RunFlags', W / 2, 122, { size: 7, align: 'center', color: '#8090a0' });
+  text(flagStrip(g.runFlags), W / 2, 136, { size: 7, align: 'center', color: '#ffe8a0' });
+  if (g._lastGateNote) {
+    text(g._lastGateNote, W / 2, 154, { size: 6, align: 'center', color: '#a0c0a0' });
+  }
+  if (fourSwords(g.runFlags)) {
+    text('评价：神兵四绝', W / 2, 172, { size: 9, align: 'center', color: '#f0c060' });
+  }
 }
 
 function drawContinue() {
@@ -325,7 +357,8 @@ function drawContinue() {
   text('CONTINUE?', W / 2, 64, { size: 16, align: 'center', color: '#f06060' });
   text(String(Math.ceil(g.continueT)), W / 2, 100, { size: 28, align: 'center', color: '#ffe0a0' });
   text(`CREDIT ${g.credit}`, W / 2, 148, { size: 10, align: 'center', color: '#e0c080' });
-  text(g.credit > 0 ? '1 / ENTER 续关' : '请先投币 5/6', W / 2, 176, {
+  text(flagStrip(g.runFlags), W / 2, 164, { size: 6, align: 'center', color: '#809060' });
+  text(g.credit > 0 ? '1 / ENTER 续关（保留旗标）' : '请先投币 5/6', W / 2, 180, {
     size: 8,
     align: 'center',
     color: '#a09080',
@@ -340,9 +373,16 @@ function drawGameOver() {
 
 function drawEnding() {
   fill('#101828');
-  text('ENDING', W / 2, 70, { size: 14, align: 'center', color: '#f0d080' });
-  text('曹操败北 · 占位', W / 2, 100, { size: 10, align: 'center', color: '#e8dcc8' });
-  text(g.charName + ' 通关', W / 2, 124, { size: 9, align: 'center', color: '#a0c0e0' });
+  text('ENDING', W / 2, 56, { size: 14, align: 'center', color: '#f0d080' });
+  text('曹操败北 · 占位', W / 2, 84, { size: 10, align: 'center', color: '#e8dcc8' });
+  text(g.charName + ' 通关', W / 2, 108, { size: 9, align: 'center', color: '#a0c0e0' });
+  text(flagStrip(g.runFlags), W / 2, 132, { size: 7, align: 'center', color: '#ffe8a0' });
+  text(
+    fourSwords(g.runFlags) ? '神兵四绝' : '四剑未齐（不挡通关）',
+    W / 2,
+    152,
+    { size: 9, align: 'center', color: fourSwords(g.runFlags) ? '#f0c060' : '#8090a0' },
+  );
 }
 
 function buildPlayInput() {
