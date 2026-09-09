@@ -334,6 +334,11 @@ export function createPlay(opts) {
         const note = Gates.canHoldIceAndBoom();
         setMsg(`青缸 · ${note.reason}`, 1.8);
       }
+      if (v.flag === 'has_boom') {
+        const note = Gates.enterBoomVault(p.runFlags);
+        const ice = Gates.canHoldIceAndBoom();
+        setMsg(`太阿 · ${note.reason} · ${ice.reason}`, 2);
+      }
     }
     if (v.swordId) {
       for (const f of livingFighters()) {
@@ -644,6 +649,9 @@ export function createPlay(opts) {
           if (c.flag === 'has_ice' && p.runFlags) {
             const note = Gates.canHoldIceAndBoom();
             setMsg(`青缸 · ${note.reason}`, 1.8);
+          } else if (c.flag === 'has_boom' && p.runFlags) {
+            const note = Gates.enterBoomVault(p.runFlags);
+            setMsg(`太阿 · ${note.reason}`, 1.8);
           } else {
             setMsg('开箱 · 神兵', 1);
           }
@@ -689,6 +697,14 @@ export function createPlay(opts) {
             setMsg('石狮正确 · 可开青缸箱', 1.5);
           } else if (pr.lion === 'wrong') {
             setMsg('石狮不对 · 再找', 0.9);
+          } else if (pr.brick) {
+            if (p.runFlags) {
+              p.runFlags.boom_brick_ok = true;
+              const g6 = Gates.enterBoomVault(p.runFlags);
+              setMsg(`凸砖开密 · ${g6.reason}`, 2);
+            } else {
+              setMsg('凸砖开密', 1.2);
+            }
           } else {
             setMsg(`破${pr.label}`, 0.6);
           }
@@ -1213,9 +1229,11 @@ export function createPlay(opts) {
       if (pr.requireInside && insideZone !== pr.requireInside) continue;
       ctx.fillStyle = pr.lamp
         ? '#c0a040'
-        : pr.lion === 'correct'
-          ? '#6080a0'
-          : '#406080';
+        : pr.brick
+          ? '#a08060'
+          : pr.lion === 'correct'
+            ? '#6080a0'
+            : '#406080';
       ctx.fillRect(pr.x - 10, pr.y, 20, 14);
       drawText(ctx, pr.label || '物', pr.x, pr.y - 10, 6, '#80a0c0', 'center');
     }
@@ -1314,7 +1332,7 @@ export function createPlay(opts) {
 
     drawText(
       ctx,
-      '关5八阵 · 破阵可重试 · 吕布掉干将',
+      '关6雪战 · 打凸砖开太阿 · 不锁冰',
       W / 2,
       212,
       6,
