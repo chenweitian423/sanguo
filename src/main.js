@@ -6,7 +6,7 @@ const ctx = canvas.getContext('2d');
 const hintEl = document.getElementById('hint');
 
 hintEl.textContent =
-  '投币5/6 · 开始1 · 选人方向+A · Play：A攻/→A大斩/B跳/→→跑/→C防/AB血杀/ABC爆气/C天书栏/D用书 · ENTER过关';
+  '投币5/6 · Play：操作同前 · C道具栏 B翻页 D使用 · 地上鸡腿瞬回 · ENTER过关';
 
 const S = {
   TITLE: 'TitleCoin',
@@ -174,7 +174,7 @@ function enterIntro() {
 
 function enterPlay() {
   g.state = S.PLAY;
-  play.reset();
+  play.reset(Math.max(1, 3 - g.deaths));
 }
 
 function clearStage() {
@@ -255,7 +255,7 @@ function drawTitle(dt) {
       color: '#c0a878',
     });
   }
-  text('SAN-5+6 流程 · 操作与气', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
+  text('SAN-5/6/7 流程·操作·HUD', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
 }
 
 function drawChar() {
@@ -427,9 +427,10 @@ function frame(now) {
         !input.abcTap;
       input.bTap =
         (pressed.has('b') || pressed.has('x') || pressed.has('k')) && !input.abTap && !input.abcTap;
-      // ↓+B squat: if down and b tap, already squatting via down held; jump only if !down
+      input.upTap = pressed.has('ArrowUp');
+      input.downTap = pressed.has('ArrowDown');
       if (held.has('ArrowDown') && input.bTap) {
-        input.bTap = false; // squat instead of jump
+        input.bTap = false;
       }
 
       play.update(input, dt);
