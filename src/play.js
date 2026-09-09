@@ -81,6 +81,8 @@ export function createPlay(opts) {
   let bumpCount = 0;
   let bumpCd = 0;
   let bossIdx = 0;
+  let lampSeq = 0;
+  let sideEnemy = null;
   let stageClearReady = false;
   let teachMsg = '';
   let playerCount = 1;
@@ -160,6 +162,8 @@ export function createPlay(opts) {
     bumpCount = 0;
     bumpCd = 0;
     bossIdx = 0;
+    lampSeq = 0;
+    sideEnemy = null;
     stageClearReady = false;
     teachMsg = '';
     groundHeals = [];
@@ -336,6 +340,32 @@ export function createPlay(opts) {
       for (const f of livingFighters()) addBagItemTo(f, v.grantBag, 1);
     }
     setMsg(v.label ? `获得 · ${v.label}` : '密室收获', 1.6);
+  }
+
+  function ensureSideBoss() {
+    if (!script || !script.sideBoss) return;
+    const sb = script.sideBoss;
+    if (sideEnemy && (sideEnemy.alive || sideEnemy.cleared)) return;
+    if (sb.requireInside && insideZone !== sb.requireInside) return;
+    const hp = scaleEnemyHp(sb.hp, playerCount, { boss: true });
+    sideEnemy = {
+      x: sb.x,
+      y: sb.y || 148,
+      hp,
+      hpMax: hp,
+      hitFlash: 0,
+      stunT: 0,
+      alive: true,
+      cleared: false,
+      isBoss: true,
+      name: sb.name,
+      id: sb.id,
+      weak: sb.weak || [],
+      armorElem: null,
+      packScore: sb.packScore || 900,
+      onClearFlag: sb.onClearFlag,
+    };
+    setMsg(`${sb.name} 出现`, 1.2);
   }
 
   function grantBumpReward(bumps) {
@@ -570,6 +600,16 @@ export function createPlay(opts) {
         if (enemy.hp <= 0) onEnemyDead(attacker);
       }
     }
+    if (sideEnemy && sideEnemy.alive) {
+      const dx = (sideEnemy.x - attacker.x) * attacker.facing;
+      const ok = reach > 70 ? Math.abs(sideEnemy.x - attacker.x) < reach : dx > 0 && dx < reach;
+      if (ok && Math.abs(sideEnemy.y - attacker.y) < 24) {
+        sideEnemy.hp -= dealt;
+        sideEnemy.hitFlash = 0.15;
+        hit = true;
+        if (sideEnemy.hp <= 0) onSideEnemyDead(attacker);
+      }
+    }
     for (const g of grunts) {
       if (!g.alive) continue;
       const dx = (g.x - attacker.x) * attacker.facing;
@@ -612,7 +652,28 @@ export function createPlay(opts) {
       if (Math.abs(pr.x - attacker.x) < reach + 8 && Math.abs(pr.y - attacker.y) < 30) {
         pr.hp -= dealt;
         hit = true;
-        if (pr.hp <= 0) {
+        if (pr.lamp) {
+          // lamps: extinguish in order, don't need full HP kill semantics beyond first hit kill
+          pr.alive = false;
+          if (pr.lamp === lampSeq + 1) {
+            lampSeq = pr.lamp;
+            setMsg(`灯 ${lampSeq}/2`, 0.8);
+            if (lampSeq >= 2 && p.runFlags) {
+              p.runFlags.lamp_ok = true;
+              setMsg('灯序完成 · 暗室门开', 1.5);
+            }
+          } else {
+            lampSeq = 0;
+            // respawn both lamps
+            for (const q of props) {
+              if (q.lamp) {
+                q.alive = true;
+                q.hp = q.hpMax || 10;
+              }
+            }
+            setMsg('灯序错误 · 需先左后右', 1.2);
+          }
+        } else if (pr.hp <= 0) {
           pr.alive = false;
           if (pr.drop) addBagItemTo(attacker, pr.drop, 1);
           if (pr.lion === 'correct') {
@@ -647,6 +708,18 @@ export function createPlay(opts) {
   function gainPipFromHitFor(fighter) {
     if (fighter.qiPips < fighter.qiMax) fighter.qiPips += 1;
     else fighter.qiCharge = Math.min(1, fighter.qiCharge + 0.15);
+  }
+
+  function onSideEnemyDead(killer = p) {
+    if (!sideEnemy) return;
+    sideEnemy.alive = false;
+    sideEnemy.cleared = true;
+    const pack = sideEnemy.packScore || 900;
+    addScoreTo(killer, pack);
+    if (isTwoPlayer(playerCount) && p2 && p2.hp > 0 && killer !== p2) addScoreTo(p2, pack);
+    if (sideEnemy.onClearFlag && p.runFlags) p.runFlags[sideEnemy.onClearFlag] = true;
+    for (const d of dropFromBoss()) applyDrop(d, sideEnemy.x);
+    setMsg(`${sideEnemy.name}败 · 可打几案进老鹰密`, 2);
   }
 
   function onEnemyDead(killer = p) {
@@ -767,6 +840,7 @@ export function createPlay(opts) {
     if (p.invulnT > 0) p.invulnT -= dt;
     if (p.fxFlash > 0) p.fxFlash -= dt;
     if (enemy.hitFlash > 0) enemy.hitFlash -= dt;
+    if (sideEnemy && sideEnemy.hitFlash > 0) sideEnemy.hitFlash -= dt;
     if (enemy.stunT > 0) enemy.stunT -= dt;
     for (const g of grunts) {
       if (g.stunT > 0) g.stunT -= dt;
@@ -894,6 +968,15 @@ export function createPlay(opts) {
       ) {
         if (!f.guarding) f.hp -= 10 * dt;
       }
+      if (
+        sideEnemy &&
+        sideEnemy.alive &&
+        f.invulnT <= 0 &&
+        Math.abs(sideEnemy.x - f.x) < 18 &&
+        Math.abs(sideEnemy.y - f.y) < 16
+      ) {
+        if (!f.guarding) f.hp -= 12 * dt;
+      }
     }
 
     tickStage(dt);
@@ -954,6 +1037,8 @@ export function createPlay(opts) {
       }
 
       if (v.type === 'door') {
+        if (v.requireFlag && !(p.runFlags && p.runFlags[v.requireFlag])) continue;
+        if (v.requireInside && insideZone !== v.requireInside) continue;
         for (const f of livingFighters()) {
           if (Math.abs(f.x - v.x) < (v.r || 24) && Math.abs(f.y - (v.y || 148)) < 30) {
             if (v.setInside) {
@@ -962,12 +1047,12 @@ export function createPlay(opts) {
                 Gates.enterFireSwordVault();
               }
               setMsg(v.note || `进入 ${v.label || '密室'}`, 1.2);
+              ensureSideBoss();
             }
             if (v.grantBag || v.bagItem || v.flag) {
-              // wangping-style instant optional loot on enter once
               grantVault(v);
             } else if (v.setInside && !vaultDone[v.id]) {
-              vaultDone[v.id] = true; // mark door used
+              vaultDone[v.id] = true;
             }
             break;
           }
@@ -1104,7 +1189,11 @@ export function createPlay(opts) {
     for (const pr of props) {
       if (!pr.alive) continue;
       if (pr.requireInside && insideZone !== pr.requireInside) continue;
-      ctx.fillStyle = pr.lion === 'correct' ? '#6080a0' : '#406080';
+      ctx.fillStyle = pr.lamp
+        ? '#c0a040'
+        : pr.lion === 'correct'
+          ? '#6080a0'
+          : '#406080';
       ctx.fillRect(pr.x - 10, pr.y, 20, 14);
       drawText(ctx, pr.label || '物', pr.x, pr.y - 10, 6, '#80a0c0', 'center');
     }
@@ -1133,6 +1222,18 @@ export function createPlay(opts) {
       ctx.fillStyle = m.color;
       ctx.fillRect(m.x - 4, m.y - 4, 8, 8);
       drawText(ctx, m.kind, m.x, m.y - 14, 6, m.color, 'center');
+    }
+
+    // side boss
+    if (sideEnemy && sideEnemy.alive) {
+      ctx.fillStyle = sideEnemy.hitFlash > 0 ? '#fff' : '#c060a0';
+      ctx.fillRect(sideEnemy.x - 10, sideEnemy.y, 20, 28);
+      drawText(ctx, sideEnemy.name, sideEnemy.x, sideEnemy.y - 12, 6, '#e0a0c0', 'center');
+      const bw = 80;
+      ctx.fillStyle = '#301828';
+      ctx.fillRect(sideEnemy.x - bw / 2, sideEnemy.y - 20, bw, 4);
+      ctx.fillStyle = '#d060a0';
+      ctx.fillRect(sideEnemy.x - bw / 2, sideEnemy.y - 20, bw * (sideEnemy.hp / sideEnemy.hpMax), 4);
     }
 
     // player
@@ -1191,7 +1292,7 @@ export function createPlay(opts) {
 
     drawText(
       ctx,
-      '关1–2 · 密室圈/门 · 多Boss撞技',
+      '关4 · 先左灯后右灯 · 撞吕蒙×3',
       W / 2,
       212,
       6,
@@ -1272,6 +1373,7 @@ export function createPlay(opts) {
       drawText(ctx, `撞 ${bumpCount}/${enemy.bumps.count}`, W / 2, 26, 7, '#e0b090', 'center');
     }
     if (insideZone) drawText(ctx, `密室:${insideZone}`, 8, 72, 6, '#80a0c0');
+    if (script && script.id === 4) drawText(ctx, `灯序 ${lampSeq}/2`, 8, 82, 6, '#e0c060');
     if (p.runFlags) drawText(ctx, flagStrip(p.runFlags), W - 8, H - 12, 5.5, '#a09070', 'right');
   }
 
