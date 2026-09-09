@@ -57,6 +57,7 @@ python3 -m http.server 8080
 - [SAN-10](https://linear.app/sanguo/issue/SAN-10/道具掉落清兵箱boss加血-傀儡定身)
 - [SAN-11](https://linear.app/sanguo/issue/SAN-11/分数升级-0-24易升表-属性相克)
 - [SAN-12](https://linear.app/sanguo/issue/SAN-12/2p-同屏落后锁卷轴-经济加量)
+- [SAN-13](https://linear.app/sanguo/issue/SAN-13/关1-截江救阿斗主路火书密孙姬)
 
 ## 道具掉落（SAN-10）
 
@@ -80,3 +81,10 @@ python3 -m http.server 8080
 - 分数/等级/背包各算；RunFlags 共享；无友伤
 - 2P：Boss HP×1.4，杂兵×1.65，掉落数量×1.5；Boss 包两人全额
 - 2P 键位默认方向键+小键盘，可在 Tab 设置里改
+
+## 关1 截江（SAN-13）
+
+- 教学波 T0–T5（攻击/跑/大斩/防/道具）
+- 火书站位密室：站圈约 0.85s，**单人即可** → `has_fire_book` + 人遁书
+- 水兽机关可打碎掉袖箭
+- Boss **孙姬**：靠近攻击或顶撞累计×2 → 傀儡；击败过关

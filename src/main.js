@@ -265,6 +265,7 @@ function enterPlay() {
   play.reset(Math.max(1, 3 - g.deaths), g.charId, g.runFlags, {
     playerCount: g.playerCount,
     charId2: g.charId2 || 'zhangfei',
+    stageId: g.stageIndex + 1,
   });
 }
 
@@ -273,9 +274,12 @@ function clearStage() {
   // Stage clear demo pickups (SAN-9) — relaxed gates always allow
   const st = g.stageIndex + 1;
   if (st === 1) {
-    g.runFlags.has_fire_book = true;
-    g.runFlags.has_puppet = true;
-    Gates.enterFireBookVault();
+    // Prefer in-stage grants; ENTER skip still fills gaps
+    if (!g.runFlags.has_fire_book) {
+      g.runFlags.has_fire_book = true;
+      Gates.enterFireBookVault();
+    }
+    if (!g.runFlags.has_puppet) g.runFlags.has_puppet = true;
   }
   if (st === 2) {
     g.runFlags.has_fire = true;
@@ -389,7 +393,7 @@ function drawTitle(dt) {
       color: '#c0a878',
     });
   }
-  text('Tab 键位设置 · SAN-12', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
+  text('Tab 键位 · SAN-13 关1截江', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
 }
 
 function drawSettings() {
@@ -618,7 +622,11 @@ function frame(now) {
       const input = buildPlayInput();
       if (held.has(g.binds.p1.down) && input.bTap) input.bTap = false;
       if (input.p2 && held.has(g.binds.p2.down) && input.p2.bTap) input.p2.bTap = false;
-      play.update(input, dt);
+      const result = play.update(input, dt);
+      if (result && result.stageClear) {
+        clearStage();
+        break;
+      }
       if (play.dead) die();
       break;
     }
