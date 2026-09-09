@@ -85,6 +85,13 @@ export function createPlay(opts) {
   let sideEnemy = null;
   let stageClearReady = false;
   let teachMsg = '';
+  /** Stage5 破阵 */
+  let formPhase = false;
+  let formWaveIdx = 0;
+  let formTimer = 0;
+  let formFailed = false;
+  let formDone = false;
+  let formAdvanceAt = null;
   let playerCount = 1;
   /** @type {any|null} */
   let p2 = null;
@@ -166,6 +173,12 @@ export function createPlay(opts) {
     sideEnemy = null;
     stageClearReady = false;
     teachMsg = '';
+    formPhase = false;
+    formWaveIdx = 0;
+    formTimer = 0;
+    formFailed = false;
+    formDone = false;
+    formAdvanceAt = null;
     groundHeals = [];
     moneys = [];
     props = [];
@@ -330,6 +343,105 @@ export function createPlay(opts) {
 
   function waveCleared() {
     return grunts.length === 0 || grunts.every((g) => !g.alive);
+  }
+
+  function formEyeAlive() {
+    return grunts.some((g) => g.alive && g.isEye);
+  }
+
+  function startFormation() {
+    if (!script || !script.formation) {
+      formDone = true;
+      beginBossAt(bossIdx + 1);
+      return;
+    }
+    formPhase = true;
+    formDone = false;
+    formFailed = false;
+    formWaveIdx = 0;
+    formAdvanceAt = null;
+    if (p.runFlags) p.runFlags.formation_cleared = false;
+    enemy.waiting = true;
+    enemy._nextBossAt = null;
+    setMsg('破阵开始 · 时限内击破阵眼', 2);
+    spawnFormWave(0);
+  }
+
+  function spawnFormWave(idx) {
+    const fm = script && script.formation;
+    if (!fm || !fm.waves || idx >= fm.waves.length) {
+      endFormation();
+      return;
+    }
+    formWaveIdx = idx;
+    formAdvanceAt = null;
+    const w = fm.waves[idx];
+    const limit = w.timeLimit != null ? w.timeLimit : fm.timeLimit != null ? fm.timeLimit : 18;
+    formTimer = limit;
+    teachMsg = w.teach || `破阵 ${idx + 1}/${fm.waves.length}`;
+    setMsg(teachMsg, 1.8);
+    const eyeIndex = w.eyeIndex != null ? w.eyeIndex : 0;
+    const spawnKind = w.spawn || 'jump';
+    grunts = (w.grunts || []).map((g, i) => {
+      const hp = scaleEnemyHp(g.hp || 16, playerCount);
+      const isEye = i === eyeIndex || !!g.isEye;
+      const unit = {
+        x: g.x,
+        y: 148,
+        hp,
+        hpMax: hp,
+        alive: true,
+        stunT: 0,
+        isEye,
+        spawn: spawnKind,
+        settled: true,
+        vx: 0,
+      };
+      if (spawnKind === 'jump') {
+        unit.y = 148 - (70 + (i % 3) * 12);
+        unit.vy = 0;
+        unit.settled = false;
+      } else if (spawnKind === 'charge') {
+        // 蹿出：从右侧冲向玩家
+        unit.x = Math.max(g.x, 520 + i * 36);
+        unit.vx = -110 - (isEye ? 20 : 0);
+        unit.settled = true;
+      }
+      return unit;
+    });
+  }
+
+  function clearFormWaveGrunts() {
+    for (const g of grunts) g.alive = false;
+  }
+
+  function scheduleFormAdvance(delay = 0.55) {
+    if (formAdvanceAt != null) return;
+    formAdvanceAt = t + delay;
+  }
+
+  function advanceFormWave() {
+    formAdvanceAt = null;
+    const fm = script.formation;
+    const next = formWaveIdx + 1;
+    if (!fm || next >= fm.waves.length) {
+      endFormation();
+      return;
+    }
+    spawnFormWave(next);
+  }
+
+  function endFormation() {
+    formPhase = false;
+    formDone = true;
+    formAdvanceAt = null;
+    formTimer = 0;
+    clearFormWaveGrunts();
+    if (p.runFlags) p.runFlags.formation_cleared = !formFailed;
+    const tag = formFailed ? '破阵失败（宽松仍出吕布）' : '破阵成功';
+    setMsg(`${tag} · 吕布来袭`, 2.2);
+    teachMsg = tag;
+    beginBossAt(bossIdx + 1);
   }
 
   function grantVault(v) {
@@ -768,6 +880,19 @@ export function createPlay(opts) {
     for (const d of dropFromBoss()) applyDrop(d, enemy.x + (Math.random() * 20 - 10));
     if (enemy.onClear) applyBossClear(enemy.onClear);
     const bl = bossesList();
+    if (
+      script &&
+      script.formation &&
+      enemy.id === script.formation.afterBossId &&
+      !formDone
+    ) {
+      setMsg(`${enemy.name}败 · 进入破阵`, 1.5);
+      enemy.waiting = true;
+      enemy._nextBossAt = null;
+      // brief beat then start formation
+      enemy._startFormAt = t + 0.85;
+      return;
+    }
     if (bossIdx + 1 < bl.length) {
       setMsg(`${enemy.name}败 · 下一Boss`, 1.5);
       enemy.waiting = true;
@@ -795,9 +920,14 @@ export function createPlay(opts) {
 
   function onGruntDead(g, killer = p) {
     g.alive = false;
-    addScoreTo(killer, 300);
+    addScoreTo(killer, g.isEye ? 800 : 300);
     applyDrop(dropFromGrunt(), g.x);
     if (Math.random() < 0.35) applyDrop(spawnMoney(), g.x + 8);
+    if (formPhase && g.isEye) {
+      setMsg('阵眼破', 1.2);
+      clearFormWaveGrunts();
+      scheduleFormAdvance(0.65);
+    }
   }
 
 
@@ -1038,6 +1168,12 @@ export function createPlay(opts) {
     if (!script) return;
     if (bumpCd > 0) bumpCd -= dt;
 
+    // delayed start formation (after shamoke)
+    if (enemy && enemy._startFormAt != null && t >= enemy._startFormAt) {
+      enemy._startFormAt = null;
+      startFormation();
+    }
+
     // delayed next boss
     if (enemy && enemy._nextBossAt != null && t >= enemy._nextBossAt) {
       const ni = enemy._nextBossIdx;
@@ -1045,8 +1181,55 @@ export function createPlay(opts) {
       beginBossAt(ni);
     }
 
-    // wave advance
-    if (enemy.waiting && enemy._nextBossAt == null && waveCleared() && script.waves && waveIdx < script.waves.length) {
+    // formation phase: timer, jump settle, charge vx
+    if (formPhase) {
+      for (const g of grunts) {
+        if (!g.alive) continue;
+        if (g.spawn === 'jump' && !g.settled) {
+          g.vy = (g.vy || 0) + 520 * dt;
+          g.y += g.vy * dt;
+          if (g.y >= 148) {
+            g.y = 148;
+            g.vy = 0;
+            g.settled = true;
+          }
+        }
+        if (g.spawn === 'charge' && g.settled) {
+          g.x += (g.vx || 0) * dt;
+          if (g.x < scrollX + 40) {
+            g.x = scrollX + 40;
+            g.vx = Math.abs(g.vx || 110);
+          } else if (g.x > scrollX + W - 40) {
+            g.x = scrollX + W - 40;
+            g.vx = -Math.abs(g.vx || 110);
+          }
+        }
+      }
+      if (formAdvanceAt != null) {
+        if (t >= formAdvanceAt) advanceFormWave();
+      } else if (formEyeAlive()) {
+        formTimer -= dt;
+        if (formTimer <= 0) {
+          formTimer = 0;
+          formFailed = true;
+          setMsg('时限到 · 阵眼未破（继续）', 1.4);
+          clearFormWaveGrunts();
+          scheduleFormAdvance(0.5);
+        }
+      }
+    }
+
+    // wave advance (skip while in/after formation gate)
+    if (
+      !formPhase &&
+      !formDone &&
+      enemy.waiting &&
+      enemy._nextBossAt == null &&
+      enemy._startFormAt == null &&
+      waveCleared() &&
+      script.waves &&
+      waveIdx < script.waves.length
+    ) {
       if (!tickStage._wait) tickStage._wait = 0.55;
       tickStage._wait -= dt;
       if (tickStage._wait <= 0) {
@@ -1054,7 +1237,7 @@ export function createPlay(opts) {
         if (waveIdx + 1 >= script.waves.length) beginBossAt(0);
         else spawnWave(waveIdx + 1);
       }
-    } else if (!(enemy && enemy._nextBossAt != null)) {
+    } else if (!(enemy && enemy._nextBossAt != null) && !formPhase) {
       tickStage._wait = 0;
     }
 
@@ -1261,8 +1444,9 @@ export function createPlay(opts) {
     // grunts
     for (const g of grunts) {
       if (!g.alive) continue;
-      ctx.fillStyle = '#606878';
+      ctx.fillStyle = g.isEye ? '#d4a017' : '#606878';
       ctx.fillRect(g.x - 8, g.y + 4, 16, 24);
+      if (g.isEye) drawText(ctx, '阵眼', g.x, g.y - 10, 6, '#ffe080', 'center');
     }
     // ground heals
     for (const h of groundHeals) {
@@ -1439,6 +1623,22 @@ export function createPlay(opts) {
     if (script && script.id === 4) drawText(ctx, `灯序 ${lampSeq}/2`, 8, 82, 6, '#e0c060');
     if (script && script.id === 7 && p.runFlags) {
       drawText(ctx, p.runFlags.route_s7 === 'thunder' ? '路线:电道' : '路线:主路', 8, 82, 6, '#a0c0e0');
+    }
+    if (formPhase && script && script.formation) {
+      const n = script.formation.waves.length;
+      const st = formFailed ? '失败' : '进行';
+      drawText(ctx, `破阵 ${formWaveIdx + 1}/${n} · ${st}`, W / 2, 26, 7, '#e0c080', 'center');
+      drawText(ctx, `时限 ${Math.max(0, formTimer).toFixed(1)}s`, W / 2, 36, 7, formTimer < 5 ? '#f08060' : '#c0e080', 'center');
+    } else if (formDone && script && script.id === 5) {
+      drawText(
+        ctx,
+        formFailed ? '破阵 失败' : '破阵 成功',
+        W / 2,
+        26,
+        7,
+        formFailed ? '#e08060' : '#80e0a0',
+        'center',
+      );
     }
     if (p.runFlags) drawText(ctx, flagStrip(p.runFlags), W - 8, H - 12, 5.5, '#a09070', 'right');
   }

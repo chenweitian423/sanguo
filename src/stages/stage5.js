@@ -1,14 +1,14 @@
-/** SAN-17 · 关5 智破八阵 — 已取消破阵门槛；清兵后直接 Boss 线到吕布 */
+/** SAN-17 · 关5 智破八阵 — 燃烧林→沙摩柯→破阵5波(阵眼)→吕布→陆逊→左慈；失败仍出吕布并掉干将+和氏璧 */
 
 export const STAGE5 = {
   id: 5,
-  worldW: 1400,
+  worldW: 1500,
   name: '智破八阵图',
-  blurb: '沙摩柯→吕布→陆逊→左慈',
+  blurb: '沙摩柯→破阵→吕布→陆逊→左慈',
   waves: [
     {
       id: 'burn',
-      teach: '燃烧林 · 无破阵门槛，清完直接 Boss',
+      teach: '燃烧林 · 可上缺口进密 · 其后破阵',
       grunts: [
         { x: 240, hp: 20 },
         { x: 280, hp: 20 },
@@ -31,12 +31,79 @@ export const STAGE5 = {
       note: '竹林密室',
     },
   ],
+  /** 119 对齐 5 波阵眼；宽松：超时失败仍打完 5 波并召唤吕布 */
+  formation: {
+    afterBossId: 'shamoke',
+    timeLimit: 18,
+    waves: [
+      {
+        spawn: 'jump',
+        eyeIndex: 0,
+        teach: '破阵 1/5 · 跳下击阵眼',
+        grunts: [
+          { x: 400, hp: 18 },
+          { x: 440, hp: 16 },
+          { x: 480, hp: 16 },
+          { x: 520, hp: 16 },
+        ],
+      },
+      {
+        spawn: 'jump',
+        eyeIndex: 0,
+        teach: '破阵 2/5 · 跳下击阵眼',
+        grunts: [
+          { x: 420, hp: 18 },
+          { x: 460, hp: 16 },
+          { x: 500, hp: 16 },
+          { x: 540, hp: 16 },
+          { x: 580, hp: 16 },
+        ],
+      },
+      {
+        spawn: 'jump',
+        eyeIndex: 0,
+        teach: '破阵 3/5 · 跳下击阵眼',
+        grunts: [
+          { x: 440, hp: 20 },
+          { x: 480, hp: 18 },
+          { x: 520, hp: 18 },
+          { x: 560, hp: 18 },
+          { x: 600, hp: 18 },
+        ],
+      },
+      {
+        spawn: 'charge',
+        eyeIndex: 0,
+        teach: '破阵 4/5 · 枪兵蹿出 · 阵眼为首冲',
+        grunts: [
+          { x: 620, hp: 28 },
+          { x: 660, hp: 24 },
+          { x: 700, hp: 24 },
+          { x: 740, hp: 24 },
+          { x: 780, hp: 24 },
+        ],
+      },
+      {
+        spawn: 'jump',
+        eyeIndex: 0,
+        teach: '破阵 5/5 · 跳下击阵眼 · 其后吕布',
+        grunts: [
+          { x: 480, hp: 30 },
+          { x: 520, hp: 26 },
+          { x: 560, hp: 26 },
+          { x: 600, hp: 26 },
+          { x: 640, hp: 26 },
+          { x: 680, hp: 26 },
+        ],
+      },
+    ],
+  },
   bosses: [
     {
       id: 'shamoke',
       name: '沙摩柯',
       hp: 160,
-      x: 820,
+      x: 900,
       y: 148,
       weak: ['冰'],
       packScore: 28000,
@@ -45,7 +112,7 @@ export const STAGE5 = {
       id: 'lubu',
       name: '吕布',
       hp: 220,
-      x: 980,
+      x: 1050,
       y: 148,
       weak: ['火'],
       packScore: 45000,
@@ -59,7 +126,7 @@ export const STAGE5 = {
       id: 'luxun',
       name: '陆逊',
       hp: 150,
-      x: 1120,
+      x: 1180,
       y: 148,
       weak: [],
       packScore: 24000,
@@ -68,7 +135,7 @@ export const STAGE5 = {
       id: 'zuoci',
       name: '左慈',
       hp: 180,
-      x: 1260,
+      x: 1300,
       y: 148,
       weak: ['火'],
       packScore: 30000,

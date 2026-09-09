@@ -38,6 +38,7 @@ export function emptyFlags() {
   const f = {};
   for (const k of FLAG_KEYS) f[k] = false;
   f.route_s7 = 'main'; // main | thunder
+  f.formation_cleared = false; // 关5 破阵：五阵眼全破才 true；失败仍出吕布
   return f;
 }
 
