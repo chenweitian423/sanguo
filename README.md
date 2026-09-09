@@ -59,6 +59,7 @@ python3 -m http.server 8080
 - [SAN-12](https://linear.app/sanguo/issue/SAN-12/2p-同屏落后锁卷轴-经济加量)
 - [SAN-13](https://linear.app/sanguo/issue/SAN-13/关1-截江救阿斗主路火书密孙姬)
 - [SAN-14](https://linear.app/sanguo/issue/SAN-14/关2-定军斩夏侯火剑密王平密双boss)
+- [SAN-15](https://linear.app/sanguo/issue/SAN-15/关3-威震汉中三boss冰剑密)
 
 ## 道具掉落（SAN-10）
 
@@ -100,3 +101,9 @@ python3 -m http.server 8080
 - 山道清兵波；**火剑密**门无条件可进 → 箱得倚天、火柱自焚得无名火
 - **王平密**可选，不锁冰/爆；可拿黄石公
 - Boss：**彻里吉**（撞×2黄石公，弱电）→ **夏侯渊**（撞×2将军印，弱火）
+
+## 关3 威震汉中（SAN-15）
+
+- Boss：**孟优**(弱爆) → **夏侯惇**(弱电) → **张辽**(无)
+- 冰剑密：进门（宽松可不强制无名火）→ 打**第三尊石狮** → 开箱得**青缸**
+- 拿冰**不锁爆**（宽松）

@@ -288,7 +288,7 @@ function clearStage() {
     Gates.enterFireSwordVault();
   }
   if (st === 3) {
-    g.runFlags.has_ice = true;
+    if (!g.runFlags.has_ice) g.runFlags.has_ice = true;
     Gates.canHoldIceAndBoom();
   }
   if (st === 4) {
@@ -393,7 +393,7 @@ function drawTitle(dt) {
       color: '#c0a878',
     });
   }
-  text('Tab 键位 · SAN-14 关2定军', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
+  text('Tab 键位 · SAN-15 关3汉中', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
 }
 
 function drawSettings() {
