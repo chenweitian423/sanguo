@@ -2,13 +2,14 @@ import { ROSTER, STAGES, W, H, CONTINUE_SEC, INTRO_SEC } from './data.js';
 import { createPlay } from './play.js';
 import { movesFor } from './moves.js';
 import { emptyFlags, flagStrip, Gates, fourSwords } from './flags.js';
+import { ACTIONS, loadBinds, saveBinds, resetBinds, keyLabel } from './binds.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const hintEl = document.getElementById('hint');
 
 hintEl.textContent =
-  '投币5/6 · 标题1=1P / 2=2P · P2:WASD+U攻/I跳/O防 · 卷轴跟落后';
+  '投币5/6 · 1=1P 2=2P · 1P:WASD+J/K/L/I=A/B/C/D · Tab键位设置';
 
 const S = {
   TITLE: 'TitleCoin',
@@ -19,6 +20,7 @@ const S = {
   CONTINUE: 'Continue',
   GAMEOVER: 'GameOver',
   ENDING: 'Ending',
+  SETTINGS: 'Settings',
 };
 
 const g = {
@@ -42,6 +44,10 @@ const g = {
   deaths: 0,
   clears: 0,
   _lastGateNote: '',
+  binds: loadBinds(),
+  bindPad: 'p1', // which pad editing
+  bindCursor: 0,
+  bindListening: false,
 };
 
 const play = createPlay({ W, H });
@@ -53,6 +59,8 @@ const pressed = new Set();
 
 function keyNorm(e) {
   if (e.code === 'Space') return 'Space';
+  if (e.code && e.code.startsWith('Numpad')) return e.code;
+  if (e.key.startsWith('Arrow')) return e.key;
   if (e.key.length === 1) return e.key.toLowerCase();
   return e.key;
 }
@@ -63,7 +71,12 @@ window.addEventListener('keydown', (e) => {
   held.add(k);
 
   if (k === 'Escape') {
-    backToTitle();
+    if (g.state === S.SETTINGS) {
+      g.bindListening = false;
+      g.state = S.TITLE;
+    } else {
+      backToTitle();
+    }
     e.preventDefault();
     return;
   }
@@ -82,6 +95,11 @@ window.addEventListener('keydown', (e) => {
 
   switch (g.state) {
     case S.TITLE:
+      if (k === 'Tab') {
+        openSettings();
+        e.preventDefault();
+        break;
+      }
       if (k === '1' || k === 'Enter') {
         startRun(1);
         e.preventDefault();
@@ -91,19 +109,23 @@ window.addEventListener('keydown', (e) => {
         e.preventDefault();
       }
       break;
+    case S.SETTINGS:
+      handleSettingsKey(k, e);
+      break;
     case S.CHAR: {
       const cols = 5;
-      if (k === 'ArrowLeft') {
+      const b = g.binds.p1;
+      if (k === b.left) {
         const col = g.cursor % cols;
         g.cursor = col === 0 ? g.cursor + cols - 1 : g.cursor - 1;
       }
-      if (k === 'ArrowRight') {
+      if (k === b.right) {
         const col = g.cursor % cols;
         g.cursor = col === cols - 1 ? g.cursor - (cols - 1) : g.cursor + 1;
       }
-      if (k === 'ArrowUp') g.cursor = (g.cursor - cols + ROSTER.length) % ROSTER.length;
-      if (k === 'ArrowDown') g.cursor = (g.cursor + cols) % ROSTER.length;
-      if (k === 'a' || k === 'z' || k === 'j' || k === 'Enter') {
+      if (k === b.up) g.cursor = (g.cursor - cols + ROSTER.length) % ROSTER.length;
+      if (k === b.down) g.cursor = (g.cursor + cols) % ROSTER.length;
+      if (k === b.A || k === 'Enter') {
         confirmChar();
         e.preventDefault();
       }
@@ -146,6 +168,58 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => {
   held.delete(keyNorm(e));
 });
+
+function openSettings() {
+  g.state = S.SETTINGS;
+  g.bindPad = 'p1';
+  g.bindCursor = 0;
+  g.bindListening = false;
+}
+
+function handleSettingsKey(k, e) {
+  if (g.bindListening) {
+    if (k === 'Escape') {
+      g.bindListening = false;
+      e.preventDefault();
+      return;
+    }
+    // ignore pure modifiers / tab while listening
+    if (k === 'Tab' || k === 'Shift' || k === 'Control' || k === 'Alt' || k === 'Meta') {
+      e.preventDefault();
+      return;
+    }
+    const action = ACTIONS[g.bindCursor].id;
+    g.binds[g.bindPad][action] = k;
+    saveBinds(g.binds);
+    g.bindListening = false;
+    e.preventDefault();
+    return;
+  }
+  if (k === 'Tab') {
+    g.bindPad = g.bindPad === 'p1' ? 'p2' : 'p1';
+    e.preventDefault();
+    return;
+  }
+  const b = g.binds.p1;
+  if (k === b.up || k === 'ArrowUp') {
+    g.bindCursor = (g.bindCursor + ACTIONS.length - 1) % ACTIONS.length;
+  }
+  if (k === b.down || k === 'ArrowDown') {
+    g.bindCursor = (g.bindCursor + 1) % ACTIONS.length;
+  }
+  if (k === b.A || k === 'Enter' || k === 'j') {
+    g.bindListening = true;
+    e.preventDefault();
+  }
+  if (k === 'r') {
+    g.binds = resetBinds();
+    e.preventDefault();
+  }
+  if (k === 'Escape' || k === 'Backspace') {
+    g.state = S.TITLE;
+    e.preventDefault();
+  }
+}
 
 function startRun(players = 1) {
   const need = players >= 2 ? 2 : 1;
@@ -315,7 +389,36 @@ function drawTitle(dt) {
       color: '#c0a878',
     });
   }
-  text('SAN-12 · 2P 落后锁卷轴', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
+  text('Tab 键位设置 · SAN-12', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
+}
+
+function drawSettings() {
+  fill('#0e1218');
+  text('键位设置', W / 2, 8, { size: 12, align: 'center', color: '#f0d090' });
+  text(
+    `${g.bindPad === 'p1' ? '【1P】' : '【2P】'} Tab切换 · A/Enter改键 · R恢复默认 · Esc返回`,
+    W / 2,
+    26,
+    { size: 6, align: 'center', color: '#8090a0' },
+  );
+  const pad = g.binds[g.bindPad];
+  ACTIONS.forEach((a, i) => {
+    const y = 48 + i * 16;
+    const sel = i === g.bindCursor;
+    const listening = sel && g.bindListening;
+    const label = listening ? '…按下新键…' : keyLabel(pad[a.id]);
+    text(a.label, 48, y, { size: 8, color: sel ? '#ffe8a0' : '#a0b0c0' });
+    text(label, W - 48, y, {
+      size: 8,
+      align: 'right',
+      color: listening ? '#f08060' : sel ? '#fff0c0' : '#c0d0e0',
+    });
+  });
+  text('默认 1P：WASD + J/K/L/I = A/B/C/D（119）', W / 2, 200, {
+    size: 6,
+    align: 'center',
+    color: '#607080',
+  });
 }
 
 function drawChar() {
@@ -431,45 +534,58 @@ function drawEnding() {
   );
 }
 
-function buildPlayInput() {
-  const a = pressed.has('a') || pressed.has('z') || pressed.has('j');
-  const b = pressed.has('b') || pressed.has('x') || pressed.has('k');
-  // D use item — not die anymore in SAN-6
-  const d = pressed.has('d') || pressed.has('l');
-  const c = pressed.has('c');
-  const left = held.has('ArrowLeft');
-  const right = held.has('ArrowRight');
-  const down = held.has('ArrowDown');
-  const leftTap = pressed.has('ArrowLeft');
-  const rightTap = pressed.has('ArrowRight');
-  const aHeld = held.has('a') || held.has('z') || held.has('j');
-  const bHeld = held.has('b') || held.has('x') || held.has('k');
-  const cHeld = held.has('c');
+function padDown(pad, action) {
+  const code = g.binds[pad][action];
+  return code ? held.has(code) : false;
+}
+function padPressed(pad, action) {
+  const code = g.binds[pad][action];
+  return code ? pressed.has(code) : false;
+}
 
-  const abcTap = aHeld && bHeld && c && (a || b || c);
+/** Build 119-style input for one pad from current binds. */
+function buildPadInput(pad) {
+  const left = padDown(pad, 'left');
+  const right = padDown(pad, 'right');
+  const down = padDown(pad, 'down');
+  const up = padDown(pad, 'up');
+  const aHeld = padDown(pad, 'A');
+  const bHeld = padDown(pad, 'B');
+  const cHeld = padDown(pad, 'C');
+  const a = padPressed(pad, 'A');
+  const b = padPressed(pad, 'B');
+  const c = padPressed(pad, 'C');
+  const d = padPressed(pad, 'D');
+
+  const abcTap = aHeld && bHeld && cHeld && (a || b || c);
   const abTap = aHeld && bHeld && !cHeld && (a || b) && !abcTap;
-  const forwardA = a && ((right && !left) || (left && !right));
+  const forwardA = a && (right || left) && !abTap && !abcTap;
+  const cTap = c && !aHeld && !bHeld;
 
   return {
     left,
     right,
     down,
-    leftTap,
-    rightTap,
-    aTap: a && !abTap && !abcTap && !forwardA,
+    up,
+    leftTap: padPressed(pad, 'left'),
+    rightTap: padPressed(pad, 'right'),
+    upTap: padPressed(pad, 'up'),
+    downTap: padPressed(pad, 'down'),
+    aTap: a && !forwardA && !abTap && !abcTap,
     bTap: b && !abTap && !abcTap,
-    cTap: c && !cHeld === false ? c && !(aHeld && bHeld) : c,
+    cTap,
     cHeld,
     dTap: d,
-    abcTap: (aHeld && bHeld && cHeld && (a || b || c)),
-    abTap: (aHeld && bHeld && !held.has('c') && (a || b)),
-    forwardA: a && ((held.has('ArrowRight') && gFaceRight()) || (held.has('ArrowLeft') && !gFaceRight())),
+    abcTap,
+    abTap,
+    forwardA,
   };
 }
 
-function gFaceRight() {
-  // approximate: if holding right, forward is right
-  return held.has('ArrowRight') || !held.has('ArrowLeft');
+function buildPlayInput() {
+  const input = buildPadInput('p1');
+  if (g.playerCount >= 2) input.p2 = buildPadInput('p2');
+  return input;
 }
 
 let last = performance.now();
@@ -500,56 +616,8 @@ function frame(now) {
       break;
     case S.PLAY: {
       const input = buildPlayInput();
-      // Fix cTap: open panel on C press alone
-      input.cTap = pressed.has('c') && !(held.has('a') || held.has('z') || held.has('j')) && !(held.has('b') || held.has('x'));
-      input.abcTap =
-        pressed.has('c') &&
-        (held.has('a') || held.has('z') || held.has('j')) &&
-        (held.has('b') || held.has('x') || held.has('k'));
-      input.abTap =
-        !input.abcTap &&
-        (pressed.has('a') || pressed.has('z') || pressed.has('j') || pressed.has('b') || pressed.has('x')) &&
-        (held.has('a') || held.has('z') || held.has('j')) &&
-        (held.has('b') || held.has('x') || held.has('k'));
-      input.forwardA =
-        (pressed.has('z') || pressed.has('j') || (g.playerCount < 2 && pressed.has('a'))) &&
-        (held.has('ArrowRight') || held.has('ArrowLeft')) &&
-        !input.abTap &&
-        !input.abcTap;
-      input.aTap =
-        (pressed.has('z') || pressed.has('j') || (g.playerCount < 2 && pressed.has('a'))) &&
-        !input.forwardA &&
-        !input.abTap &&
-        !input.abcTap;
-      input.bTap =
-        (pressed.has('b') || pressed.has('x') || pressed.has('k')) && !input.abTap && !input.abcTap;
-      input.upTap = pressed.has('ArrowUp');
-      input.downTap = pressed.has('ArrowDown');
-      if (held.has('ArrowDown') && input.bTap) {
-        input.bTap = false;
-      }
-
-      // P2: WASD move, U attack, I jump, O guard/held, P use (unused stub)
-      if (g.playerCount >= 2) {
-        input.p2 = {
-          left: held.has('a'),
-          right: held.has('d'),
-          down: held.has('s'),
-          leftTap: pressed.has('a'),
-          rightTap: pressed.has('d'),
-          upTap: pressed.has('w'),
-          downTap: pressed.has('s'),
-          aTap: pressed.has('u'),
-          bTap: pressed.has('i'),
-          cTap: pressed.has('o'),
-          cHeld: held.has('o'),
-          dTap: pressed.has('p'),
-          abcTap: held.has('u') && held.has('i') && pressed.has('o'),
-          abTap: false,
-          forwardA: false,
-        };
-      }
-
+      if (held.has(g.binds.p1.down) && input.bTap) input.bTap = false;
+      if (input.p2 && held.has(g.binds.p2.down) && input.p2.bTap) input.p2.bTap = false;
       play.update(input, dt);
       if (play.dead) die();
       break;
@@ -559,6 +627,9 @@ function frame(now) {
   switch (g.state) {
     case S.TITLE:
       drawTitle(dt);
+      break;
+    case S.SETTINGS:
+      drawSettings();
       break;
     case S.CHAR:
       drawChar();
