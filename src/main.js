@@ -4,6 +4,7 @@ import { movesFor } from './moves.js';
 import { emptyFlags, flagStrip, Gates, fourSwords, swordCount } from './flags.js';
 import { ACTIONS, loadBinds, saveBinds, resetBinds, keyLabel } from './binds.js';
 import { UI, drawUiText } from './ui.js';
+import { drawHeroMini, drawStageThumb, drawLogoPanel, drawStageBackground } from './gfx.js';
 import {
   playSfx,
   playBgm,
@@ -566,11 +567,16 @@ function drawRatingStrip(ratings, y) {
 function drawTitle(dt) {
   g.blink += dt;
   fill('#120e0c');
+  // soft scenic wash behind logo
+  drawStageBackground(ctx, 7, g.blink * 12, W, H, 960, g.blink);
+  ctx.fillStyle = 'rgba(12,10,8,0.55)';
+  ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = 'rgba(0,0,0,0.15)';
   for (let y = 0; y < H; y += 2) ctx.fillRect(0, y, W, 1);
-  text('烽火三国', W / 2, 44, { size: UI.logo, align: 'center', color: '#f0c060' });
-  text('FENGHUO SANGUO', W / 2, 74, { size: UI.hud, align: 'center', color: '#8a7060' });
-  text('横版合作街机 · 384×224', W / 2, 96, { size: UI.caption, align: 'center', color: '#a09080' });
+  drawLogoPanel(ctx, W, H, g.blink);
+  text('烽火三国', W / 2, 48, { size: UI.logo, align: 'center', color: '#f0c060' });
+  text('FENGHUO SANGUO', W / 2, 72, { size: UI.hud, align: 'center', color: '#c0a878' });
+  text('横版合作街机 · 384×224', W / 2, 102, { size: UI.caption, align: 'center', color: '#a09080' });
   text(`CREDIT  ${String(g.credit).padStart(2, '0')}`, W / 2, 140, {
     size: UI.body,
     align: 'center',
@@ -587,7 +593,7 @@ function drawTitle(dt) {
       color: '#c0a878',
     });
   }
-  text('Tab 键位 · SAN-21 音效UI打磨', W / 2, 204, { size: UI.hudSm, align: 'center', color: '#5a5048' });
+  text('Tab 键位 · SAN-22 可视层', W / 2, 204, { size: UI.hudSm, align: 'center', color: '#5a5048' });
 }
 
 function drawAttractBanner() {
@@ -611,21 +617,22 @@ function drawAttractBanner() {
 function drawAttractCard() {
   const st = STAGES[attractStageIndex()];
   fill('#0c1018');
+  drawStageThumb(ctx, st.id, 52, 24, 280, 70, g.blink);
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.fillRect(0, 0, W, 28);
+  ctx.fillRect(0, 0, W, 20);
   ctx.fillRect(0, H - 28, W, 28);
   const badge = `STAGE ${String(st.id).padStart(2, '0')}`;
   const bw = 72;
   ctx.fillStyle = '#1a2838';
-  ctx.fillRect(W / 2 - bw / 2, 48, bw, 16);
+  ctx.fillRect(W / 2 - bw / 2, 100, bw, 14);
   ctx.strokeStyle = '#80a0c0';
   ctx.lineWidth = UI.stroke;
-  ctx.strokeRect(W / 2 - bw / 2 + 0.5, 48.5, bw - 1, 15);
-  text(badge, W / 2, 50, { size: UI.hud, align: 'center', color: '#a0c0e0' });
-  text(st.name, W / 2, 78, { size: UI.cardNameLg, align: 'center', color: '#f0e0b0' });
-  text(st.blurb, W / 2, 108, { size: UI.caption, align: 'center', color: '#90a0b0' });
-  text('演示 DEMO', W / 2, 136, { size: UI.charName, align: 'center', color: '#c0a060' });
-  text('投币开始 · INSERT COIN', W / 2, 168, {
+  ctx.strokeRect(W / 2 - bw / 2 + 0.5, 100.5, bw - 1, 13);
+  text(badge, W / 2, 101, { size: UI.hud, align: 'center', color: '#a0c0e0' });
+  text(st.name, W / 2, 120, { size: UI.cardName, align: 'center', color: '#f0e0b0' });
+  text(st.blurb, W / 2, 138, { size: UI.caption, align: 'center', color: '#90a0b0' });
+  text('演示 DEMO', W / 2, 156, { size: UI.charName, align: 'center', color: '#c0a060' });
+  text('投币开始 · INSERT COIN', W / 2, 178, {
     size: UI.hud,
     align: 'center',
     color: Math.floor(g.blink * 2) % 2 === 0 ? '#ffe8a0' : '#809060',
@@ -674,12 +681,12 @@ function drawChar() {
   );
   const cols = 5;
   const cardW = 64;
-  const cardH = 56;
+  const cardH = 58;
   const gapX = 8;
-  const gapY = 10;
+  const gapY = 8;
   const gridW = cols * cardW + (cols - 1) * gapX;
   const ox = (W - gridW) / 2;
-  const oy = 44;
+  const oy = 40;
   ROSTER.forEach((c, i) => {
     const col = i % cols;
     const row = Math.floor(i / cols);
@@ -691,7 +698,8 @@ function drawChar() {
     ctx.strokeStyle = sel ? '#f0c060' : '#405060';
     ctx.lineWidth = sel ? 2 : 1;
     ctx.strokeRect(x + 0.5, y + 0.5, cardW - 1, cardH - 1);
-    text(c.name, x + cardW / 2, y + 20, {
+    drawHeroMini(ctx, c.id, x + cardW / 2, y + 38, 0.72);
+    text(c.name, x + cardW / 2, y + 42, {
       size: UI.charName,
       align: 'center',
       color: sel ? '#fff0c0' : '#c8d0d8',
@@ -711,38 +719,39 @@ function drawChar() {
 function drawIntro() {
   const st = STAGES[g.stageIndex];
   fill('#0c1018');
-  // vignette bars
+  // stage BG thumbnail
+  drawStageThumb(ctx, st.id, 52, 28, 280, 72, (INTRO_SEC - g.introT) * 2);
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.fillRect(0, 0, W, 28);
+  ctx.fillRect(0, 0, W, 22);
   ctx.fillRect(0, H - 28, W, 28);
-  // stage badge
   const badge = `STAGE ${String(st.id).padStart(2, '0')}`;
   const bw = 72;
   ctx.fillStyle = '#1a2838';
-  ctx.fillRect(W / 2 - bw / 2, 48, bw, 16);
+  ctx.fillRect(W / 2 - bw / 2, 104, bw, 14);
   ctx.strokeStyle = '#80a0c0';
   ctx.lineWidth = UI.stroke;
-  ctx.strokeRect(W / 2 - bw / 2 + 0.5, 48.5, bw - 1, 15);
-  text(badge, W / 2, 50, { size: UI.hud, align: 'center', color: '#a0c0e0' });
-  text(st.name, W / 2, 78, { size: UI.cardNameLg, align: 'center', color: '#f0e0b0' });
-  text(st.blurb, W / 2, 108, { size: UI.caption, align: 'center', color: '#90a0b0' });
+  ctx.strokeRect(W / 2 - bw / 2 + 0.5, 104.5, bw - 1, 13);
+  text(badge, W / 2, 105, { size: UI.hud, align: 'center', color: '#a0c0e0' });
+  text(st.name, W / 2, 122, { size: UI.cardName, align: 'center', color: '#f0e0b0' });
+  text(st.blurb, W / 2, 140, { size: UI.caption, align: 'center', color: '#90a0b0' });
   const duo =
     g.playerCount >= 2 && g.charName2
       ? `${g.charName} + ${g.charName2} 出阵`
       : `${g.charName} 出阵`;
-  text(duo, W / 2, 136, { size: UI.charName, align: 'center', color: '#c0a060' });
+  text(duo, W / 2, 156, { size: UI.charName, align: 'center', color: '#c0a060' });
+  if (g.charId) drawHeroMini(ctx, g.charId, W / 2 - (g.charId2 ? 20 : 0), 186, 0.55);
+  if (g.charId2) drawHeroMini(ctx, g.charId2, W / 2 + 20, 186, 0.55);
   const remain = Math.max(0, g.introT);
-  text(remain > 0.35 ? 'START / ENTER 跳过' : '出阵…', W / 2, 168, {
-    size: UI.hud,
+  text(remain > 0.35 ? 'START / ENTER 跳过' : '出阵…', W / 2, 198, {
+    size: UI.hudSm,
     align: 'center',
     color: '#607080',
   });
-  // progress ticks
   const t = Math.max(0, Math.min(1, 1 - g.introT / INTRO_SEC));
   ctx.fillStyle = '#304050';
-  ctx.fillRect(W / 2 - 40, 188, 80, 3);
+  ctx.fillRect(W / 2 - 40, 210, 80, 3);
   ctx.fillStyle = '#f0c060';
-  ctx.fillRect(W / 2 - 40, 188, 80 * t, 3);
+  ctx.fillRect(W / 2 - 40, 210, 80 * t, 3);
 }
 
 function drawClear() {
@@ -964,11 +973,7 @@ function frame(now) {
       } else if (g.attract.phase === 'title_flash') {
         drawTitle(dt);
       } else {
-        fill('#182028');
-        ctx.fillStyle = '#2a3840';
-        ctx.fillRect(0, 160, W, 64);
-        ctx.fillStyle = '#3a4850';
-        ctx.fillRect(0, 160, W, 2);
+        // BG painted inside play.draw via gfx
         const st = STAGES[attractStageIndex()];
         const hero = ROSTER.find((c) => c.id === ATTRACT_HERO);
         play.draw(ctx, {
@@ -991,11 +996,6 @@ function frame(now) {
       drawIntro();
       break;
     case S.PLAY: {
-      fill('#182028');
-      ctx.fillStyle = '#2a3840';
-      ctx.fillRect(0, 160, W, 64);
-      ctx.fillStyle = '#3a4850';
-      ctx.fillRect(0, 160, W, 2);
       const st = STAGES[g.stageIndex];
       play.draw(ctx, {
         stageName: st.name,
