@@ -2,13 +2,18 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>烽火三国 · SAN-21 音效UI打磨</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>烽火三国 · Attract Demo</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div id="wrap">
     <canvas id="game" width="384" height="224" aria-label="烽火三国"></canvas>
+    <div id="softpad" aria-label="触控按键">
+      <button type="button" data-act="coin">投币</button>
+      <button type="button" data-act="start">START</button>
+      <button type="button" data-act="1p">1P</button>
+    </div>
     <p id="hint"></p>
   </div>
   <script type="module" src="src/main.js"></script>

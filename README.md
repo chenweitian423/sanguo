@@ -44,8 +44,10 @@ python3 -m http.server 8080
 
 ## 状态流
 
-`TitleCoin` → `CharSelect` → `StageIntro` → `Play` → `StageClear` → … → 关7后 `Ending` → 标题  
+`TitleCoin`（CREDIT=0 闲置约 2.5s → `Attract` 演示循环关1–7，投币/START 回标题）→ `CharSelect` → `StageIntro` → `Play` → `StageClear` → … → 关7后 `Ending` → 标题  
 `Play` 死亡 → `Continue`（10s，耗币续关保留 RunFlags）→ 超时/无币 `GameOver` → 标题
+
+手机：画布下软键「投币 / START / 1P」；无币也可看 Attract 演示。
 
 ## Linear
 
