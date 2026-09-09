@@ -1643,7 +1643,7 @@ export function createPlay(opts) {
 
     drawText(
       ctx,
-      'SAN-20 Boss轴 · 预警闪/招式名 · 2P Boss×1.4',
+      'SAN-22 原画背景/武将 · Boss轴 · 2P',
       W / 2,
       212,
       6,

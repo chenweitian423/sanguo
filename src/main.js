@@ -4,7 +4,7 @@ import { movesFor } from './moves.js';
 import { emptyFlags, flagStrip, Gates, fourSwords, swordCount } from './flags.js';
 import { ACTIONS, loadBinds, saveBinds, resetBinds, keyLabel } from './binds.js';
 import { UI, drawUiText } from './ui.js';
-import { drawHeroMini, drawStageThumb, drawLogoPanel, drawStageBackground } from './gfx.js';
+import { drawHeroMini, drawStageThumb, drawLogoPanel, drawStageBackground, preloadHeroArt } from './gfx.js';
 import {
   playSfx,
   playBgm,
@@ -16,6 +16,9 @@ import {
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const hintEl = document.getElementById('hint');
+
+// Prefetch roster PNG art when present (guanyu/zhangfei/zhaoyun + any future chars)
+preloadHeroArt(ROSTER.map((c) => c.id));
 
 hintEl.textContent =
   '投币5/6 · 1=1P 2=2P · 1P:WASD+J/K/L/I=A/B/C/D · Tab键位 · 手机可投币看演示';

@@ -1,6 +1,7 @@
 /**
- * SAN-22 visual layer — original arcade-inspired pixel silhouettes.
- * Pure canvas drawing (gradients / shapes). Optional PNG under assets/bg/stageN.png.
+ * SAN-22 visual layer — original arcade-inspired art + procedural fallbacks.
+ * Optional PNG under assets/bg/stageN.png and assets/chars/{charId}.png
+ * (generated originals inspired by public 119 screenshots — NOT ROM dumps).
  * NO KOFs / 三国战纪 ROM sprites or ripped tiles.
  */
 
@@ -8,6 +9,15 @@
 const bgCache = new Map();
 /** @type {Set<number>} */
 const bgTried = new Set();
+
+/** @type {Map<string, HTMLImageElement|null>} */
+const heroCache = new Map();
+/** @type {Set<string>} */
+const heroTried = new Set();
+
+function readyImg(img) {
+  return !!(img && img.complete && img.naturalWidth > 0);
+}
 
 function tryLoadBg(stageId) {
   if (bgTried.has(stageId)) return bgCache.get(stageId) || null;
@@ -24,8 +34,33 @@ function tryLoadBg(stageId) {
   return null;
 }
 
+function tryLoadHero(charId) {
+  const id = String(charId || '');
+  if (!id) return null;
+  if (heroTried.has(id)) return heroCache.get(id) || null;
+  heroTried.add(id);
+  if (typeof Image === 'undefined') {
+    heroCache.set(id, null);
+    return null;
+  }
+  const img = new Image();
+  img.onload = () => heroCache.set(id, img);
+  img.onerror = () => heroCache.set(id, null);
+  img.src = `assets/chars/${id}.png`;
+  heroCache.set(id, null); // pending → procedural until load
+  return null;
+}
+
+/** Prefetch known roster art (safe no-ops if file missing). */
+export function preloadHeroArt(ids) {
+  for (const id of ids || []) tryLoadHero(id);
+}
+
 /** Feet sit near y+28 (graybox convention: body from y to y+28). */
 const FEET = 28;
+
+/** In-play PNG hero height (px). */
+const HERO_PNG_H = 36;
 
 /** Per-hero palette + weapon silhouette kind. */
 export const HERO_LOOK = {
@@ -155,15 +190,24 @@ function roundRect(ctx, x, y, w, h, r) {
 export function drawStageBackground(ctx, stageId, scrollX, W, H, worldW, t) {
   const id = stageId | 0 || 1;
   const img = tryLoadBg(id);
-  if (img && img.complete && img.naturalWidth) {
-    const sx = ((scrollX % img.naturalWidth) + img.naturalWidth) % img.naturalWidth;
-    ctx.drawImage(img, sx, 0, W, H, 0, 0, W, H);
-    // still paint ground strip for entity feet readability
-    const p = pal(id);
-    ctx.fillStyle = p.strip;
-    ctx.fillRect(0, 160, W, H - 160);
-    ctx.fillStyle = p.ground;
-    ctx.fillRect(0, 158, W, 4);
+  if (readyImg(img)) {
+    // Stretch/crop to cover H; parallax scroll with scrollX (wrap if wider than screen).
+    const scale = H / img.naturalHeight;
+    const dw = img.naturalWidth * scale;
+    const dh = H;
+    const par = 0.45;
+    let ox = (scrollX * par) % Math.max(dw, 1);
+    if (ox < 0) ox += dw;
+    // If image barely wider than screen, clamp instead of wrapping hard seams
+    if (dw <= W + 2) {
+      const maxOff = Math.max(0, dw - W);
+      const world = Math.max(1, (worldW || 960) - W);
+      ox = maxOff > 0 ? Math.min(maxOff, (scrollX / world) * maxOff) : 0;
+      ctx.drawImage(img, -ox, 0, dw, dh);
+    } else {
+      ctx.drawImage(img, -ox, 0, dw, dh);
+      if (ox + W > dw) ctx.drawImage(img, -ox + dw, 0, dw, dh);
+    }
     return;
   }
 
@@ -467,7 +511,63 @@ function drawRiverFinaleBg(ctx, W, H, far, mid, near, t, p) {
  * @param {CanvasRenderingContext2D} ctx
  * @param {{ charId: string, x: number, y: number, facing?: number, atkT?: number, airborne?: boolean, squatting?: boolean, guarding?: boolean, burstT?: number, invulnT?: number, t?: number }} o
  */
+function drawHeroPng(ctx, o, img) {
+  const facing = o.facing == null ? 1 : o.facing;
+  const t = o.t || 0;
+  const bob = o.airborne ? -2 : Math.sin(t * 8) * (o.atkT > 0 ? 0 : 0.8);
+  let feetY = o.y + FEET;
+  let targetH = HERO_PNG_H;
+  if (o.squatting) {
+    targetH = HERO_PNG_H * 0.78;
+    feetY = o.y + FEET;
+  } else if (o.airborne) {
+    feetY = o.y + 20;
+  }
+  const scale = targetH / img.naturalHeight;
+  const dw = img.naturalWidth * scale;
+  const dh = targetH;
+  const cx = o.x;
+  const top = feetY - dh + bob;
+
+  ctx.save();
+  if (o.invulnT > 0 && Math.floor(t * 20) % 2) ctx.globalAlpha = 0.4;
+  if (o.burstT > 0) {
+    ctx.strokeStyle = 'rgba(240,200,60,0.55)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, top + dh / 2, Math.max(14, dw * 0.28), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.translate(cx, feetY + bob);
+  ctx.scale(facing, 1);
+  ctx.drawImage(img, -dw / 2, -dh, dw, dh);
+  ctx.restore();
+  ctx.globalAlpha = 1;
+
+  if (o.atkT > 0) {
+    const reach = 30;
+    ctx.strokeStyle = 'rgba(255,220,120,0.65)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    const ay = top + dh * 0.4;
+    if (facing > 0) ctx.arc(cx + 4, ay, reach * 0.55, -0.9, 0.6);
+    else ctx.arc(cx - 4, ay, reach * 0.55, Math.PI - 0.6, Math.PI + 0.9);
+    ctx.stroke();
+  }
+  if (o.guarding) {
+    ctx.strokeStyle = '#80c0ff';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(cx - 10, top - 2, 20, dh + 4);
+  }
+}
+
 export function drawHero(ctx, o) {
+  const png = tryLoadHero(o.charId);
+  if (readyImg(png)) {
+    drawHeroPng(ctx, o, png);
+    return;
+  }
+
   const look = HERO_LOOK[o.charId] || HERO_LOOK.guanyu;
   const facing = o.facing == null ? 1 : o.facing;
   const t = o.t || 0;
@@ -661,6 +761,18 @@ function drawWeapon(ctx, look, top, bodyH, atkT, feetY) {
  * @param {number} [scale]
  */
 export function drawHeroMini(ctx, charId, x, y, scale = 0.7) {
+  const png = tryLoadHero(charId);
+  if (readyImg(png)) {
+    // CharSelect / HUD: prefer PNG art (~28px at scale 0.7)
+    const targetH = 28 * (scale / 0.7);
+    const s = targetH / png.naturalHeight;
+    const dw = png.naturalWidth * s;
+    const dh = targetH;
+    ctx.save();
+    ctx.drawImage(png, x - dw / 2, y - dh, dw, dh);
+    ctx.restore();
+    return;
+  }
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(scale, scale);
