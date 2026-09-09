@@ -3,6 +3,15 @@ import { PAGE_NAMES, PAGE_THROW, cloneBag } from './items.js';
 import { movesFor } from './moves.js';
 import { applySwordFlag, flagStrip, Gates } from './flags.js';
 import { dropFromGrunt, dropFromChest, dropFromBoss, spawnMoney } from './drops.js';
+import {
+  levelFromScore,
+  atkSpeedMult,
+  itemPowerTier,
+  finalDamage,
+  swordElem,
+  nextThreshold,
+  BOSS_WEAK,
+} from './leveling.js';
 
 /**
  * @param {{ W: number, H: number }} opts
@@ -41,6 +50,8 @@ export function createPlay(opts) {
     specialName: '',
     specialT: 0,
     score: 0,
+    level: 0,
+    itemTier: 1,
     msg: '',
     msgT: 0,
     lastRightT: -9,
@@ -69,6 +80,8 @@ export function createPlay(opts) {
       alive: true,
       isBoss: !!bossLike,
       name: bossLike ? '木桩校尉' : '杂兵',
+      armorElem: null,
+      weak: bossLike ? ['火'] : [], // stub: fire weak to demo 相克
     };
   }
 
@@ -125,6 +138,7 @@ export function createPlay(opts) {
     chests = [{ x: 120, y: 156, open: false }];
     moneys = [];
     p.score = p.score || 0;
+    syncLevel(false);
     t = 0;
   }
 
@@ -150,6 +164,20 @@ export function createPlay(opts) {
     } else if (d.type === 'money') {
       moneys.push({ x: atX, y: 168, ...d });
     }
+  }
+
+  function syncLevel(announce = true) {
+    const prev = p.level;
+    p.level = levelFromScore(p.score);
+    p.itemTier = itemPowerTier(p.level);
+    if (announce && p.level > prev) {
+      setMsg(`升级 LV${p.level} · 道具威力T${p.itemTier}`, 1.2);
+    }
+  }
+
+  function addScore(n) {
+    p.score += n;
+    syncLevel(true);
   }
 
   function setMsg(s, dur = 1.2) {
@@ -235,7 +263,8 @@ export function createPlay(opts) {
   function tryAttack(kind) {
     if (p.atkT > 0 || p.panelOpen) return;
     p.atkKind = kind;
-    p.atkT = kind === 'slash' ? 0.28 : kind === 'heavy' ? 0.4 : kind === 'blood' ? 0.35 : 0.3;
+    const spd = atkSpeedMult(p.level);
+    p.atkT = (kind === 'slash' ? 0.28 : kind === 'heavy' ? 0.4 : kind === 'blood' ? 0.35 : 0.3) / spd;
     const reach = kind === 'heavy' ? 36 : 28;
     let dmg = kind === 'heavy' ? 14 : kind === 'blood' ? 18 : p.burstT > 0 ? 12 : 8;
     if (p.equippedSword) dmg *= 1.25;
@@ -243,13 +272,29 @@ export function createPlay(opts) {
     hitWorld(dmg, reach);
   }
 
-  function hitWorld(dmg, reach) {
+  function scaledDmg(base, atkElem = null) {
+    const se = swordElem(p.equippedSword);
+    const elem = atkElem || se;
+    const weakList = enemy.weak || BOSS_WEAK.wood || [];
+    return finalDamage({
+      base,
+      charId: p.charId,
+      level: p.level,
+      atkElem: elem,
+      defElem: enemy.armorElem || null,
+      weakList,
+      swordBonus: p.equippedSword ? 0.15 : 0,
+    });
+  }
+
+  function hitWorld(dmg, reach, atkElem = null) {
+    const dealt = scaledDmg(dmg, atkElem);
     let hit = false;
     if (enemy.alive) {
       const dx = (enemy.x - p.x) * p.facing;
       const ok = reach > 70 ? Math.abs(enemy.x - p.x) < reach : dx > 0 && dx < reach;
       if (ok && Math.abs(enemy.y - p.y) < 24) {
-        enemy.hp -= dmg;
+        enemy.hp -= dealt;
         enemy.hitFlash = 0.15;
         hit = true;
         if (enemy.hp <= 0) onEnemyDead();
@@ -260,7 +305,7 @@ export function createPlay(opts) {
       const dx = (g.x - p.x) * p.facing;
       const ok = reach > 70 ? Math.abs(g.x - p.x) < reach : dx > 0 && dx < reach;
       if (ok && Math.abs(g.y - p.y) < 24) {
-        g.hp -= dmg;
+        g.hp -= dealt;
         hit = true;
         if (g.hp <= 0) onGruntDead(g);
       }
@@ -281,7 +326,7 @@ export function createPlay(opts) {
   function onEnemyDead() {
     enemy.alive = false;
     enemy.hp = 0;
-    p.score += 900;
+    addScore(900);
     for (const d of dropFromBoss()) applyDrop(d, enemy.x + (Math.random() * 20 - 10));
     // Boss always heal already in dropFromBoss
     setMsg('Boss倒 · 必掉加血 · ENTER过关', 2);
@@ -289,7 +334,7 @@ export function createPlay(opts) {
 
   function onGruntDead(g) {
     g.alive = false;
-    p.score += 300;
+    addScore(300);
     applyDrop(dropFromGrunt(), g.x);
     if (Math.random() < 0.35) applyDrop(spawnMoney(), g.x + 8);
   }
@@ -354,8 +399,10 @@ export function createPlay(opts) {
       setMsg(any ? '傀儡定身（非助战）' : '附近无敌人', 1);
     } else if (enemy.alive) {
       let base = it.kind === 'book' ? 22 : it.kind === 'treasure' ? 18 : 10;
+      base *= [1, 1, 1.35, 1.7][p.itemTier] || 1;
       if (p.bookBoost) base *= 1.6;
-      enemy.hp -= base;
+      const dealt = scaledDmg(base, it.elem || null);
+      enemy.hp -= dealt;
       enemy.hitFlash = 0.2;
       gainPipFromHit();
       if (enemy.hp <= 0) onEnemyDead();
@@ -475,7 +522,7 @@ export function createPlay(opts) {
     for (let i = moneys.length - 1; i >= 0; i--) {
       const m = moneys[i];
       if (Math.abs(m.x - p.x) < 14 && Math.abs(m.y - (p.y + 20)) < 24) {
-        p.score += m.score;
+        addScore(m.score);
         setMsg(`${m.kind} +${m.score}`, 0.6);
         moneys.splice(i, 1);
       }
@@ -572,7 +619,7 @@ export function createPlay(opts) {
 
     drawText(
       ctx,
-      '清兵掉投掷 · 箱掉法宝 · Boss必掉加血 · 金钱加分',
+      '分数升级 LV0–24 · 属性相克 · 道具威力≤LV20',
       W / 2,
       212,
       6,
@@ -613,9 +660,11 @@ export function createPlay(opts) {
     ctx.fillRect(W - 100, 4, 96, 28);
     drawText(ctx, '2P —', W - 52, 12, 7, '#506070', 'center');
 
-    drawText(ctx, `SCORE ${p.score}`, W - 8, 36, 7, '#e0d0a0', 'right');
-    drawText(ctx, `CREDIT ${hud.credit}`, W - 8, 46, 7, '#c0a878', 'right');
-    if (p.burstT > 0) drawText(ctx, `爆气 ${p.burstT.toFixed(1)}`, W - 8, 56, 7, '#f0c040', 'right');
+    drawText(ctx, `LV${p.level}  SCORE ${p.score}`, W - 8, 36, 7, '#e0d0a0', 'right');
+    const nxt = nextThreshold(p.level);
+    if (nxt != null) drawText(ctx, `下一档 ${nxt}`, W - 8, 46, 6, '#908060', 'right');
+    drawText(ctx, `CREDIT ${hud.credit}`, W - 8, 56, 7, '#c0a878', 'right');
+    if (p.burstT > 0) drawText(ctx, `爆气 ${p.burstT.toFixed(1)}`, W - 8, 66, 7, '#f0c040', 'right');
     if (p.equippedSword) {
       const sw = p.bag.find((i) => i.id === p.equippedSword);
       drawText(ctx, sw ? sw.name : '', 8, 62, 7, '#f0a060');
@@ -703,6 +752,9 @@ export function createPlay(opts) {
     },
     get score() {
       return p.score;
+    },
+    get level() {
+      return p.level;
     },
   };
 }
