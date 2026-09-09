@@ -55,6 +55,7 @@ python3 -m http.server 8080
 - [SAN-9](https://linear.app/sanguo/issue/SAN-9/runflags-状态机-宽松门控)
 - [SAN-10](https://linear.app/sanguo/issue/SAN-10/道具掉落清兵箱boss加血-傀儡定身)
 - [SAN-11](https://linear.app/sanguo/issue/SAN-11/分数升级-0-24易升表-属性相克)
+- [SAN-12](https://linear.app/sanguo/issue/SAN-12/2p-同屏落后锁卷轴-经济加量)
 
 ## 道具掉落（SAN-10）
 
@@ -70,3 +71,11 @@ python3 -m http.server 8080
 - 五档 ATK（每 5 级）；攻速每档约 +3.5%
 - `final = base × (atk/112) × elem_mult × (1+sword_bonus)`
 - 火↔冰 1.5；同属 0.75；Boss 弱点命中 1.5
+
+## 2P 同屏（SAN-12）
+
+- 标题 `1`=1P（1币），`2`=2P（2币）；选人可同角
+- 卷轴跟随**落后**玩家；领先者无法独自推镜
+- 分数/等级/背包各算；RunFlags 共享；无友伤
+- 2P：Boss HP×1.4，杂兵×1.65，掉落数量×1.5；Boss 包两人全额
+- P2：`WASD` 移动 · `U` 攻 · `I` 跳 · `O` 防；2P 时 1P 请用 `Z`/`J` 攻击（让出 A 给 2P 左移）
