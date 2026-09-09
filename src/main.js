@@ -301,7 +301,7 @@ function clearStage() {
   }
   if (st === 6) {
     const g6 = Gates.enterBoomVault(g.runFlags);
-    g.runFlags.has_boom = true;
+    if (!g.runFlags.has_boom) g.runFlags.has_boom = true;
     g._lastGateNote = g6.reason;
   }
   if (st === 7) {
@@ -393,7 +393,7 @@ function drawTitle(dt) {
       color: '#c0a878',
     });
   }
-  text('Tab 键位 · SAN-17 关5八阵', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
+  text('Tab 键位 · SAN-18 关6雪战', W / 2, 204, { size: 7, align: 'center', color: '#5a5048' });
 }
 
 function drawSettings() {
