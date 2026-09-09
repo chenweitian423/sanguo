@@ -30,7 +30,6 @@ export const BOSS_WEAK = {
   xiahouyuan: ['火'],
   mengyou: ['爆'],
   xiaohoudun: ['电'],
-  xiaohoudun: ['电'],
   zhangliao: [],
   lumeng: [],
   enemydiao: [],
@@ -45,6 +44,7 @@ export const BOSS_WEAK = {
   weiyan: ['电'],
   simayi: ['冰', '爆'],
   caocao: ['电'],
+  lubu_bonus: ['火'],
   wood: [], // stub boss
 };
 

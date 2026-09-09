@@ -64,6 +64,7 @@ python3 -m http.server 8080
 - [SAN-17](https://linear.app/sanguo/issue/SAN-17/关5-智破八阵破阵吕布线)
 - [SAN-18](https://linear.app/sanguo/issue/SAN-18/关6-雪战夺荆州许褚线爆剑密)
 - [SAN-19](https://linear.app/sanguo/issue/SAN-19/关7-三国归一统主路电道终战)
+- [SAN-20](https://linear.app/sanguo/issue/SAN-20/全boss-ai轴弱点接入)
 
 ## 道具掉落（SAN-10）
 
@@ -87,6 +88,16 @@ python3 -m http.server 8080
 - 分数/等级/背包各算；RunFlags 共享；无友伤
 - 2P：Boss HP×1.4，杂兵×1.65，掉落数量×1.5；Boss 包两人全额
 - 2P 键位默认方向键+小键盘，可在 Tab 设置里改
+
+
+## Boss AI / 轴 / 弱点（SAN-20）
+
+- `src/bosses.js`：相对数值（Notion A=10→play HP）+ 短轴状态机 `idle→预警→出手→硬直`
+- 弱点唯一来源：`leveling.BOSS_WEAK`（与关卡 `weak` 对齐）；命中相克仍走 SAN-11
+- 招式原型：斩击 / 冲刺 / 远程弹道 / 范围震屏 / 跳砸；HUD 显示预警与招式名
+- 曹操一/二阶段（半血锁 45f）；吕布半血加速；左慈飞行（地面普攻伤害折扣）
+- 2P Boss HP×1.4（`coop.scaleEnemyHp` / `COOP.bossHpMult`）已核验
+- 可选高分吕布仅有数值 stub（`lubu_bonus`），通关后召唤未接线（控范围）
 
 ## 关1 对齐说明
 

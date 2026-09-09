@@ -78,7 +78,7 @@ export const STAGE4 = {
   sideBoss: {
     id: 'enemydiao',
     name: '敌貂蝉',
-    hp: 130,
+    hp: 160,
     x: 340,
     y: 148,
     weak: [],
@@ -90,7 +90,7 @@ export const STAGE4 = {
     {
       id: 'lumeng',
       name: '吕蒙',
-      hp: 190,
+      hp: 200,
       x: 1180,
       y: 148,
       weak: [],

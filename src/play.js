@@ -14,6 +14,12 @@ import {
 } from './leveling.js';
 import { COOP, isTwoPlayer, scaleEnemyHp, scaleDropQty, trailingScrollX, clampPlayerX } from './coop.js';
 import { stageScript } from './stages/index.js';
+import {
+  resolveBossDef,
+  createBossAi,
+  tickBossAi,
+  airborneHitMult,
+} from './bosses.js';
 
 /**
  * @param {{ W: number, H: number }} opts
@@ -81,6 +87,10 @@ export function createPlay(opts) {
   let bumpCount = 0;
   let bumpCd = 0;
   let bossIdx = 0;
+  /** @type {any|null} */
+  let bossAi = null;
+  /** @type {any|null} */
+  let sideBossAi = null;
   let lampSeq = 0;
   let sideEnemy = null;
   let stageClearReady = false;
@@ -169,6 +179,8 @@ export function createPlay(opts) {
     bumpCount = 0;
     bumpCd = 0;
     bossIdx = 0;
+    bossAi = null;
+    sideBossAi = null;
     lampSeq = 0;
     sideEnemy = null;
     stageClearReady = false;
@@ -304,11 +316,14 @@ export function createPlay(opts) {
       return;
     }
     bossIdx = idx;
-    const b = bl[idx];
+    const raw = bl[idx];
+    const b = resolveBossDef(raw);
     const hp = scaleEnemyHp(b.hp, playerCount, { boss: true });
+    const groundY = b.y || 148;
     enemy = {
       x: b.x,
-      y: b.y || 148,
+      y: b.airborne ? groundY - 36 : groundY,
+      groundY,
       hp,
       hpMax: hp,
       hitFlash: 0,
@@ -324,20 +339,23 @@ export function createPlay(opts) {
       packScore: b.packScore || 900,
       onClear: b.onClear || null,
       airborne: !!b.airborne,
+      relAtk: b.relAtk,
     };
     // compat stage1 bumpsForPuppet
-    if (!enemy.bumps && b.bumpsForPuppet) {
-      enemy.bumps = { count: b.bumpsForPuppet, flag: 'has_puppet', item: 'puppet', msg: '撞×2 · 傀儡' };
+    if (!enemy.bumps && raw.bumpsForPuppet) {
+      enemy.bumps = { count: raw.bumpsForPuppet, flag: 'has_puppet', item: 'puppet', msg: '撞×2 · 傀儡' };
     }
+    bossAi = createBossAi(b.id);
+    const weakTag = (b.weak && b.weak.length) ? `弱${b.weak.join('/')}` : '无弱点';
     const need = enemy.bumps ? enemy.bumps.count : 0;
     teachMsg = need
-      ? `${b.name} · 撞×${need}`
+      ? `${b.name} · 撞×${need} · ${weakTag}`
       : b.airborne
-        ? `${b.name}（飞行）`
+        ? `${b.name}（飞行）· ${weakTag}`
         : b.onClear
-          ? `${b.name} · 败可得神兵`
-          : `${b.name}`;
-    setMsg(b.note || teachMsg, 2.2);
+          ? `${b.name} · 败可得神兵 · ${weakTag}`
+          : `${b.name} · ${weakTag}`;
+    setMsg(raw.note || teachMsg, 2.2);
     bumpCount = 0;
   }
 
@@ -478,13 +496,15 @@ export function createPlay(opts) {
 
   function ensureSideBoss() {
     if (!script || !script.sideBoss) return;
-    const sb = script.sideBoss;
+    const raw = script.sideBoss;
     if (sideEnemy && (sideEnemy.alive || sideEnemy.cleared)) return;
-    if (sb.requireInside && insideZone !== sb.requireInside) return;
+    if (raw.requireInside && insideZone !== raw.requireInside) return;
+    const sb = resolveBossDef(raw);
     const hp = scaleEnemyHp(sb.hp, playerCount, { boss: true });
     sideEnemy = {
       x: sb.x,
       y: sb.y || 148,
+      groundY: sb.y || 148,
       hp,
       hpMax: hp,
       hitFlash: 0,
@@ -497,8 +517,11 @@ export function createPlay(opts) {
       weak: sb.weak || [],
       armorElem: null,
       packScore: sb.packScore || 900,
-      onClearFlag: sb.onClearFlag,
+      onClearFlag: raw.onClearFlag,
+      relAtk: sb.relAtk,
+      airborne: !!sb.airborne,
     };
+    sideBossAi = createBossAi(sb.id);
     setMsg(`${sb.name} 出现`, 1.2);
   }
 
@@ -638,9 +661,6 @@ export function createPlay(opts) {
 
   function gainPipFromHit() {
     gainPipFromHitFor(p);
-  } else {
-      p.qiCharge = Math.min(1, p.qiCharge + 0.15);
-    }
   }
 
 
@@ -727,8 +747,13 @@ export function createPlay(opts) {
     if (enemy.alive) {
       const dx = (enemy.x - attacker.x) * attacker.facing;
       const ok = reach > 70 ? Math.abs(enemy.x - attacker.x) < reach : dx > 0 && dx < reach;
-      if (ok && Math.abs(enemy.y - attacker.y) < 24) {
-        enemy.hp -= dealt;
+      const yOk = enemy.airborne
+        ? Math.abs(enemy.y - attacker.y) < 48
+        : Math.abs(enemy.y - attacker.y) < 24;
+      if (ok && yOk) {
+        let d = dealt * airborneHitMult(enemy, attacker);
+        if (bossAi && bossAi.invulnT > 0) d *= 0.15;
+        enemy.hp -= d;
         enemy.hitFlash = 0.15;
         hit = true;
         if (enemy.hp <= 0) onEnemyDead(attacker);
@@ -859,6 +884,7 @@ export function createPlay(opts) {
     if (!sideEnemy) return;
     sideEnemy.alive = false;
     sideEnemy.cleared = true;
+    sideBossAi = null;
     const pack = sideEnemy.packScore || 900;
     addScoreTo(killer, pack);
     if (isTwoPlayer(playerCount) && p2 && p2.hp > 0 && killer !== p2) addScoreTo(p2, pack);
@@ -870,6 +896,7 @@ export function createPlay(opts) {
   function onEnemyDead(killer = p) {
     enemy.alive = false;
     enemy.hp = 0;
+    bossAi = null;
     const pack = enemy.packScore || (script && script.boss && script.boss.packScore) || 900;
     if (isTwoPlayer(playerCount)) {
       if (p.hp > 0) addScoreTo(p, pack);
@@ -1135,26 +1162,30 @@ export function createPlay(opts) {
       }
     }
 
+    // light residual contact (patterned AI does most damage)
     for (const f of livingFighters()) {
       if (
         enemy.alive &&
         (enemy.stunT || 0) <= 0 &&
         f.invulnT <= 0 &&
-        Math.abs(enemy.x - f.x) < 18 &&
-        Math.abs(enemy.y - f.y) < 16
+        Math.abs(enemy.x - f.x) < 16 &&
+        Math.abs(enemy.y - f.y) < 18
       ) {
-        if (!f.guarding) f.hp -= 10 * dt;
+        if (!f.guarding) f.hp -= 3 * dt;
       }
       if (
         sideEnemy &&
         sideEnemy.alive &&
         f.invulnT <= 0 &&
-        Math.abs(sideEnemy.x - f.x) < 18 &&
-        Math.abs(sideEnemy.y - f.y) < 16
+        Math.abs(sideEnemy.x - f.x) < 16 &&
+        Math.abs(sideEnemy.y - f.y) < 18
       ) {
-        if (!f.guarding) f.hp -= 12 * dt;
+        if (!f.guarding) f.hp -= 3.5 * dt;
       }
     }
+
+    applyBossBrain(enemy, bossAi, dt);
+    if (sideEnemy && sideEnemy.alive) applyBossBrain(sideEnemy, sideBossAi, dt);
 
     tickStage(dt);
 
@@ -1162,6 +1193,26 @@ export function createPlay(opts) {
       dead: p.hp <= 0 && (!p2 || p2.hp <= 0),
       stageClear: stageClearReady,
     };
+  }
+
+  function applyBossBrain(ent, ai, dt) {
+    if (!ent || !ent.alive || !ai || ent.waiting) return;
+    const targets = livingFighters();
+    const ev = tickBossAi(ai, ent, targets, dt, { scrollX, viewW: W });
+    if (ev.label && ai.moveHudT > 0.01) {
+      // brief HUD via msg only on telegraph start (flash)
+      if (ev.flash && ev.label) setMsg(ev.label, 0.7);
+    }
+    if (ev.flash) ent.hitFlash = Math.max(ent.hitFlash || 0, 0.12);
+    for (const e of ev.dmgEvents || []) {
+      const f = e.target;
+      if (!f || f.hp <= 0 || (f.invulnT || 0) > 0) continue;
+      let dmg = e.dmg;
+      if (f.guarding) dmg *= 0.35;
+      f.hp -= dmg;
+      f.invulnT = Math.max(f.invulnT || 0, 0.28);
+      f.fxFlash = 0.15;
+    }
   }
 
   function tickStage(dt) {
@@ -1507,10 +1558,39 @@ export function createPlay(opts) {
       ctx.fillRect(0, 60, W, 80);
     }
 
-    // enemy + boss HP
+    // boss projectiles (main + side)
+    const drawProjs = (ai, col) => {
+      if (!ai) return;
+      for (const pr of ai.projectiles || []) {
+        ctx.fillStyle = col;
+        ctx.fillRect(pr.x - 4, (pr.y || 148) + 6, 8, 6);
+      }
+    };
+    drawProjs(bossAi, '#e0c060');
+    drawProjs(sideBossAi, '#e080c0');
+
+    // enemy + boss body
     if (enemy.alive) {
-      ctx.fillStyle = enemy.hitFlash > 0 ? '#fff' : '#805060';
-      ctx.fillRect(enemy.x - 10, enemy.y, 20, 28);
+      const tele = bossAi && bossAi.state === 'telegraph';
+      ctx.fillStyle = enemy.hitFlash > 0 ? '#fff' : tele ? '#c08040' : '#805060';
+      const bh = enemy.airborne ? 24 : 28;
+      ctx.fillRect(enemy.x - 10, enemy.y, 20, bh);
+      if (tele) {
+        ctx.strokeStyle = '#ffe080';
+        ctx.strokeRect(enemy.x - 14, enemy.y - 4, 28, bh + 8);
+      }
+      if (bossAi && bossAi.state === 'attack') {
+        ctx.fillStyle = 'rgba(255,120,80,0.35)';
+        const reach = (bossAi.move && bossAi.move.reach) || 36;
+        const fac = bossAi.facing || 1;
+        if (bossAi.move && (bossAi.move.kind === 'slash' || bossAi.move.kind === 'dash')) {
+          ctx.fillRect(fac > 0 ? enemy.x : enemy.x - reach, enemy.y + 4, reach, 14);
+        } else if (bossAi.move && (bossAi.move.kind === 'aoe' || bossAi.move.kind === 'slam')) {
+          ctx.beginPath();
+          ctx.arc(enemy.x, enemy.y + 14, reach * 0.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
     } else {
       ctx.fillStyle = '#405060';
       ctx.fillRect(enemy.x - 10, enemy.y + 18, 20, 10);
@@ -1531,7 +1611,7 @@ export function createPlay(opts) {
 
     drawText(
       ctx,
-      '关7 · 电道需雷神锤 · 终战曹操',
+      'SAN-20 Boss轴 · 预警闪/招式名 · 2P Boss×1.4',
       W / 2,
       212,
       6,
@@ -1618,6 +1698,21 @@ export function createPlay(opts) {
     if (teachMsg) drawText(ctx, teachMsg, W / 2, H - 12, 6, '#c0a878', 'center');
     if (enemy.alive && enemy.bumps) {
       drawText(ctx, `撞 ${bumpCount}/${enemy.bumps.count}`, W / 2, 26, 7, '#e0b090', 'center');
+    }
+    if (enemy.alive && bossAi && bossAi.moveHudT > 0 && bossAi.teleLabel) {
+      const st = bossAi.state === 'telegraph' ? '预警' : bossAi.state === 'attack' ? '出手' : '';
+      drawText(
+        ctx,
+        `${st ? st + ' · ' : ''}${bossAi.teleLabel}`,
+        W / 2,
+        enemy.bumps ? 36 : 26,
+        7,
+        bossAi.state === 'telegraph' ? '#ffe080' : '#f0a070',
+        'center',
+      );
+    }
+    if (enemy.alive && enemy.weak && enemy.weak.length) {
+      drawText(ctx, `弱:${enemy.weak.join('')}`, W / 2, 46, 6, '#a0c0e0', 'center');
     }
     if (insideZone) drawText(ctx, `密室:${insideZone}`, 8, 72, 6, '#80a0c0');
     if (script && script.id === 4) drawText(ctx, `灯序 ${lampSeq}/2`, 8, 82, 6, '#e0c060');

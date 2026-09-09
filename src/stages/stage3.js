@@ -67,7 +67,7 @@ export const STAGE3 = {
     {
       id: 'mengyou',
       name: '孟优',
-      hp: 150,
+      hp: 147,
       x: 880,
       y: 148,
       weak: ['爆'],
@@ -76,7 +76,7 @@ export const STAGE3 = {
     {
       id: 'xiaohoudun',
       name: '夏侯惇',
-      hp: 170,
+      hp: 187,
       x: 1000,
       y: 148,
       weak: ['电'],
@@ -86,7 +86,7 @@ export const STAGE3 = {
     {
       id: 'zhangliao',
       name: '张辽',
-      hp: 160,
+      hp: 173,
       x: 1120,
       y: 148,
       weak: [],
