@@ -1,0 +1,106 @@
+/** SAN-14 · 关2 定军斩夏侯 — 火剑密（单人无条件）+ 王平密不锁 + 彻里吉→夏侯 */
+
+export const STAGE2 = {
+  id: 2,
+  worldW: 1200,
+  name: '定军斩夏侯',
+  blurb: '火剑密 · 彻里吉→夏侯渊',
+  waves: [
+    {
+      id: 'slope',
+      teach: '定军山道 · 清兵上坡',
+      grunts: [
+        { x: 240, hp: 18 },
+        { x: 280, hp: 18 },
+        { x: 320, hp: 18 },
+      ],
+    },
+    {
+      id: 'mid',
+      teach: '左侧可进火剑密（无条件）',
+      grunts: [
+        { x: 400, hp: 20 },
+        { x: 440, hp: 20 },
+      ],
+      chest: { x: 380 },
+    },
+    {
+      id: 'before_boss',
+      teach: '王平密可选（不锁冰/爆）',
+      grunts: [
+        { x: 560, hp: 22 },
+        { x: 600, hp: 22 },
+        { x: 640, hp: 22 },
+      ],
+    },
+  ],
+  vaults: [
+    {
+      id: 'fire_sword_door',
+      type: 'door',
+      x: 360,
+      y: 156,
+      r: 26,
+      label: '火剑密入口',
+      // entering marks inside; chest/pillar are separate markers while inside
+      setInside: 'fire_sword',
+    },
+    {
+      id: 'yitian_chest',
+      type: 'chest_flag',
+      x: 300,
+      y: 156,
+      requireInside: 'fire_sword',
+      label: '倚天箱',
+      flag: 'has_fire',
+      swordId: 'sword_fire',
+      bagOnlyOnce: true,
+    },
+    {
+      id: 'nameless_pillar',
+      type: 'pillar',
+      x: 250,
+      y: 156,
+      r: 20,
+      holdSec: 0.7,
+      requireInside: 'fire_sword',
+      label: '异色火柱',
+      flag: 'has_nameless_fire',
+      hurt: 8,
+    },
+    {
+      id: 'wangping',
+      type: 'door',
+      x: 520,
+      y: 156,
+      r: 24,
+      label: '王平密',
+      optional: true,
+      setInside: 'wangping',
+      note: '不锁冰爆（宽松）',
+      grantBag: 'huangshi',
+    },
+  ],
+  bosses: [
+    {
+      id: 'cheliji',
+      name: '彻里吉',
+      hp: 140,
+      x: 880,
+      y: 148,
+      weak: ['电'],
+      packScore: 25000,
+      bumps: { count: 2, item: 'huangshi', msg: '撞彻里吉 · 黄石公' },
+    },
+    {
+      id: 'xiahouyuan',
+      name: '夏侯渊',
+      hp: 180,
+      x: 1040,
+      y: 148,
+      weak: ['火'],
+      packScore: 30000,
+      bumps: { count: 2, flag: 'has_general_seal', msg: '撞夏侯 · 将军印' },
+    },
+  ],
+};

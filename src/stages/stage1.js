@@ -82,4 +82,30 @@ export const STAGE1 = {
     bumpsForPuppet: 2,
     packScore: 20000,
   },
+  // normalized
+  bosses: [
+    {
+      id: 'sunji',
+      name: '孙姬',
+      hp: 120,
+      x: 880,
+      y: 148,
+      weak: [],
+      packScore: 20000,
+      bumps: { count: 2, flag: 'has_puppet', item: 'puppet', msg: '撞×2 · 获得傀儡（定身）' },
+    },
+  ],
+  vaults: [
+    {
+      id: 'fire_book',
+      type: 'stand',
+      x: 400,
+      y: 168,
+      r: 22,
+      holdSec: 0.85,
+      flag: 'has_fire_book',
+      bagItem: 'rendun',
+      label: '火书站位（单人即可）',
+    },
+  ],
 };
