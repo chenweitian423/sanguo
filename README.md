@@ -68,6 +68,7 @@ python3 -m http.server 8080
 - [SAN-19](https://linear.app/sanguo/issue/SAN-19/关7-三国归一统主路电道终战)
 - [SAN-20](https://linear.app/sanguo/issue/SAN-20/全boss-ai轴弱点接入)
 - [SAN-21](https://linear.app/sanguo/issue/SAN-21) Done：音效UI + 评价彩蛋 + 杂兵档
+- [SAN-22](https://linear.app/sanguo/issue/SAN-22) Done：可视层（原画风像素剪影 + 分关背景）
 
 ## 道具掉落（SAN-10）
 
@@ -158,3 +159,8 @@ python3 -m http.server 8080
 - 主路：**越吉** → **魏延** → **司马懿** → **曹操**
 - **电道**：持 `has_leishenchui` 进门 → **跳过越吉/魏延**，仍打司马懿→曹操
 - 四剑齐仅为 Ending 评价（神兵四绝），不挡通关
+
+## 可视层（SAN-22）
+
+- `src/gfx.js`：关卡分景背景（河船/山地/林/雨夜/八阵雾/雪城/终局江）+ 10 武将剪影 + 杂兵/Boss/箱道具绘制
+- 纯 Canvas 矢量剪影；可选 `assets/bg/stageN.png`（**禁止**三国战纪 ROM 素材，见 `assets/README.md`）

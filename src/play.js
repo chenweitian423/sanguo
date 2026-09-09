@@ -23,6 +23,15 @@ import {
 import { makeGrunt } from './grunts.js';
 import { playSfx, playBgm } from './audio.js';
 import { UI, drawUiText } from './ui.js';
+import {
+  drawStageBackground,
+  drawHero,
+  drawGrunt,
+  drawBoss,
+  drawProp,
+  drawChest,
+  drawHeroMini,
+} from './gfx.js';
 
 /**
  * @param {{ W: number, H: number }} opts
@@ -1479,6 +1488,9 @@ export function createPlay(opts) {
   }
 
   function draw(ctx, hud) {
+    // scenic BG in screen space (parallax uses scrollX)
+    drawStageBackground(ctx, stageId || 1, scrollX, W, H, worldW, t);
+
     ctx.save();
     ctx.translate(-scrollX, 0);
     // vault markers
@@ -1511,27 +1523,18 @@ export function createPlay(opts) {
     for (const pr of props) {
       if (!pr.alive) continue;
       if (pr.requireInside && insideZone !== pr.requireInside) continue;
-      ctx.fillStyle = pr.lamp
-        ? '#c0a040'
-        : pr.brick
-          ? '#a08060'
-          : pr.lion === 'correct'
-            ? '#6080a0'
-            : '#406080';
-      ctx.fillRect(pr.x - 10, pr.y, 20, 14);
-      drawText(ctx, pr.label || '物', pr.x, pr.y - 10, 6, '#80a0c0', 'center');
+      drawProp(ctx, pr);
+      if (pr.label) drawText(ctx, pr.label, pr.x, pr.y - 12, 6, '#80a0c0', 'center');
     }
     // chests
     for (const c of chests) {
-      ctx.fillStyle = c.open ? '#403020' : '#8a5a20';
-      ctx.fillRect(c.x - 10, c.y, 20, 14);
-      if (!c.open) drawText(ctx, '箱', c.x, c.y - 10, 6, '#c0a060', 'center');
+      drawChest(ctx, c);
+      if (!c.open) drawText(ctx, '箱', c.x, c.y - 12, 6, '#c0a060', 'center');
     }
     // grunts
     for (const g of grunts) {
       if (!g.alive) continue;
-      ctx.fillStyle = g.isEye ? '#d4a017' : g.color || '#606878';
-      ctx.fillRect(g.x - 8, g.y + 4, 16, 24);
+      drawGrunt(ctx, g);
       if (g.isEye) drawText(ctx, '阵眼', g.x, g.y - 10, UI.micro, '#ffe080', 'center');
       else if (g.label) drawText(ctx, g.label, g.x, g.y - 8, UI.micro, '#c0c8d0', 'center');
     }
@@ -1552,46 +1555,38 @@ export function createPlay(opts) {
 
     // side boss
     if (sideEnemy && sideEnemy.alive) {
-      ctx.fillStyle = sideEnemy.hitFlash > 0 ? '#fff' : '#c060a0';
-      ctx.fillRect(sideEnemy.x - 10, sideEnemy.y, 20, 28);
-      drawText(ctx, sideEnemy.name, sideEnemy.x, sideEnemy.y - 12, 6, '#e0a0c0', 'center');
+      drawBoss(ctx, sideEnemy, t, {
+        telegraph: sideBossAi && sideBossAi.state === 'telegraph',
+        attacking: sideBossAi && sideBossAi.state === 'attack',
+        facing: sideBossAi && sideBossAi.facing,
+        reach: sideBossAi && sideBossAi.move && sideBossAi.move.reach,
+        moveKind: sideBossAi && sideBossAi.move && sideBossAi.move.kind,
+      });
       const bw = 80;
       ctx.fillStyle = '#301828';
-      ctx.fillRect(sideEnemy.x - bw / 2, sideEnemy.y - 20, bw, 4);
+      ctx.fillRect(sideEnemy.x - bw / 2, sideEnemy.y - 22, bw, 4);
       ctx.fillStyle = '#d060a0';
-      ctx.fillRect(sideEnemy.x - bw / 2, sideEnemy.y - 20, bw * (sideEnemy.hp / sideEnemy.hpMax), 4);
+      ctx.fillRect(sideEnemy.x - bw / 2, sideEnemy.y - 22, bw * (sideEnemy.hp / sideEnemy.hpMax), 4);
     }
 
     // player
     const kit = movesFor(p.charId);
-    ctx.fillStyle = p.burstT > 0 ? '#f0c040' : kit.color;
-    if (p.invulnT > 0 && Math.floor(t * 20) % 2) ctx.globalAlpha = 0.4;
-    const pw = 14;
-    const ph = p.squatting ? 18 : 28;
-    const py = p.y - ph + 28;
-    ctx.fillRect(p.x - pw / 2, py, pw, ph);
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = '#201810';
-    ctx.fillRect(p.x + p.facing * 4, py + 8, 3, 3);
-    // avatar chip
-    ctx.fillStyle = '#3a2a18';
-    ctx.fillRect(6, 6, 18, 18);
-    ctx.strokeStyle = '#f0c060';
-    ctx.strokeRect(6.5, 6.5, 17, 17);
-    drawText(ctx, (hud.charName || '?')[0], 15, 9, 10, '#ffe8a0', 'center');
-
-    if (p.atkT > 0) {
-      ctx.fillStyle = 'rgba(255,220,120,0.5)';
-      const reach = p.atkKind === 'heavy' ? 36 : 28;
-      ctx.fillRect(p.facing > 0 ? p.x : p.x - reach, p.y - 10, reach, 12);
-    }
-    if (p.guarding) {
-      ctx.strokeStyle = '#80c0ff';
-      ctx.strokeRect(p.x - 10, py - 2, 20, ph + 4);
-    }
+    drawHero(ctx, {
+      charId: p.charId,
+      x: p.x,
+      y: p.y,
+      facing: p.facing,
+      atkT: p.atkT,
+      airborne: p.airborne,
+      squatting: p.squatting,
+      guarding: p.guarding,
+      burstT: p.burstT,
+      invulnT: p.invulnT,
+      t,
+    });
     if (p.fxFlash > 0) {
       ctx.fillStyle = `rgba(180,220,255,${p.fxFlash})`;
-      ctx.fillRect(0, 60, W, 80);
+      ctx.fillRect(scrollX, 60, W, 80);
     }
 
     // boss projectiles (main + side)
@@ -1606,39 +1601,40 @@ export function createPlay(opts) {
     drawProjs(sideBossAi, '#e080c0');
 
     // enemy + boss body
-    if (enemy.alive) {
-      const tele = bossAi && bossAi.state === 'telegraph';
-      ctx.fillStyle = enemy.hitFlash > 0 ? '#fff' : tele ? '#c08040' : '#805060';
-      const bh = enemy.airborne ? 24 : 28;
-      ctx.fillRect(enemy.x - 10, enemy.y, 20, bh);
-      if (tele) {
-        ctx.strokeStyle = '#ffe080';
-        ctx.strokeRect(enemy.x - 14, enemy.y - 4, 28, bh + 8);
-      }
-      if (bossAi && bossAi.state === 'attack') {
-        ctx.fillStyle = 'rgba(255,120,80,0.35)';
-        const reach = (bossAi.move && bossAi.move.reach) || 36;
-        const fac = bossAi.facing || 1;
-        if (bossAi.move && (bossAi.move.kind === 'slash' || bossAi.move.kind === 'dash')) {
-          ctx.fillRect(fac > 0 ? enemy.x : enemy.x - reach, enemy.y + 4, reach, 14);
-        } else if (bossAi.move && (bossAi.move.kind === 'aoe' || bossAi.move.kind === 'slam')) {
-          ctx.beginPath();
-          ctx.arc(enemy.x, enemy.y + 14, reach * 0.5, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-    } else {
-      ctx.fillStyle = '#405060';
-      ctx.fillRect(enemy.x - 10, enemy.y + 18, 20, 10);
-    }
+    drawBoss(ctx, enemy, t, {
+      telegraph: bossAi && bossAi.state === 'telegraph',
+      attacking: bossAi && bossAi.state === 'attack',
+      facing: bossAi && bossAi.facing,
+      reach: bossAi && bossAi.move && bossAi.move.reach,
+      moveKind: bossAi && bossAi.move && bossAi.move.kind,
+    });
 
     // P2 body
     if (p2 && p2.hp > 0) {
-      ctx.fillStyle = p2.invulnT > 0 ? '#fff' : '#5080c0';
-      ctx.fillRect(p2.x - 10, p2.y, 20, 28);
+      drawHero(ctx, {
+        charId: p2.charId,
+        x: p2.x,
+        y: p2.y,
+        facing: p2.facing || 1,
+        atkT: p2.atkT || 0,
+        airborne: !!p2.airborne,
+        squatting: !!p2.squatting,
+        guarding: !!p2.guarding,
+        burstT: p2.burstT || 0,
+        invulnT: p2.invulnT || 0,
+        t,
+      });
       drawText(ctx, '2P', p2.x, p2.y - 10, 6, '#a0c0e0', 'center');
     }
     ctx.restore();
+
+    // HUD avatar chip (screen space)
+    ctx.fillStyle = '#3a2a18';
+    ctx.fillRect(6, 6, 18, 18);
+    ctx.strokeStyle = '#f0c060';
+    ctx.strokeRect(6.5, 6.5, 17, 17);
+    drawHeroMini(ctx, p.charId, 15, 22, 0.45);
+
     drawHud(ctx, hud);
 
     if (p.specialT > 0) drawText(ctx, p.specialName, W / 2, 78, 11, '#ffe080', 'center');
