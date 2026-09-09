@@ -1,51 +1,21 @@
-/** SAN-17 · 关5 智破八阵 — 沙摩柯→破阵（可重试）→吕布→陆逊→左慈；干将+和氏璧 */
+/** SAN-17 · 关5 智破八阵 — 已取消破阵门槛；清兵后直接 Boss 线到吕布 */
 
 export const STAGE5 = {
   id: 5,
-  worldW: 1500,
+  worldW: 1400,
   name: '智破八阵图',
   blurb: '沙摩柯→吕布→陆逊→左慈',
   waves: [
     {
       id: 'burn',
-      teach: '燃烧林 · 可上缺口进密',
+      teach: '燃烧林 · 无破阵门槛，清完直接 Boss',
       grunts: [
         { x: 240, hp: 20 },
         { x: 280, hp: 20 },
         { x: 320, hp: 20 },
+        { x: 360, hp: 20 },
       ],
       chest: { x: 220 },
-    },
-    {
-      id: 'form1',
-      teach: '破阵波1/3（失败可重试·宽松）',
-      grunts: [
-        { x: 400, hp: 18 },
-        { x: 440, hp: 18 },
-        { x: 480, hp: 18 },
-        { x: 520, hp: 18 },
-      ],
-    },
-    {
-      id: 'form2',
-      teach: '破阵波2/3',
-      grunts: [
-        { x: 460, hp: 20 },
-        { x: 500, hp: 20 },
-        { x: 540, hp: 20 },
-        { x: 580, hp: 20 },
-      ],
-    },
-    {
-      id: 'form3',
-      teach: '破阵波3/3 · 其后吕布',
-      grunts: [
-        { x: 520, hp: 22 },
-        { x: 560, hp: 22 },
-        { x: 600, hp: 22 },
-        { x: 640, hp: 22 },
-        { x: 680, hp: 22 },
-      ],
     },
   ],
   vaults: [
@@ -66,17 +36,16 @@ export const STAGE5 = {
       id: 'shamoke',
       name: '沙摩柯',
       hp: 160,
-      x: 900,
+      x: 820,
       y: 148,
       weak: ['冰'],
       packScore: 28000,
-      note: '半血可撤（原型：打完即过）',
     },
     {
       id: 'lubu',
       name: '吕布',
       hp: 220,
-      x: 1050,
+      x: 980,
       y: 148,
       weak: ['火'],
       packScore: 45000,
@@ -90,7 +59,7 @@ export const STAGE5 = {
       id: 'luxun',
       name: '陆逊',
       hp: 150,
-      x: 1180,
+      x: 1120,
       y: 148,
       weak: [],
       packScore: 24000,
@@ -99,7 +68,7 @@ export const STAGE5 = {
       id: 'zuoci',
       name: '左慈',
       hp: 180,
-      x: 1300,
+      x: 1260,
       y: 148,
       weak: ['火'],
       packScore: 30000,
