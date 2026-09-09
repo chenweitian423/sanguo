@@ -225,6 +225,7 @@ export function createPlay(opts) {
           open: false,
           vaultId: v.id,
           requireInside: v.requireInside || null,
+          requireFlag: v.requireFlag || null,
           flag: v.flag,
           swordId: v.swordId || null,
         });
@@ -317,6 +318,10 @@ export function createPlay(opts) {
       p.runFlags[v.flag] = true;
       if (v.flag === 'has_fire_book') Gates.enterFireBookVault();
       if (v.flag === 'has_fire') Gates.enterFireSwordVault();
+      if (v.flag === 'has_ice') {
+        const note = Gates.canHoldIceAndBoom();
+        setMsg(`青缸 · ${note.reason}`, 1.8);
+      }
     }
     if (v.swordId) {
       for (const f of livingFighters()) {
@@ -578,6 +583,7 @@ export function createPlay(opts) {
     for (const c of chests) {
       if (c.open) continue;
       if (c.requireInside && insideZone !== c.requireInside) continue;
+      if (c.requireFlag && !(p.runFlags && p.runFlags[c.requireFlag])) continue;
       if (Math.abs(c.x - attacker.x) < reach && Math.abs(c.y - attacker.y) < 30) {
         c.open = true;
         if (c.swordId || c.flag) {
@@ -587,7 +593,12 @@ export function createPlay(opts) {
             if (p.runFlags) applySwordFlag(p.runFlags, c.swordId);
           }
           if (c.vaultId) vaultDone[c.vaultId] = true;
-          setMsg('开箱 · 神兵', 1);
+          if (c.flag === 'has_ice' && p.runFlags) {
+            const note = Gates.canHoldIceAndBoom();
+            setMsg(`青缸 · ${note.reason}`, 1.8);
+          } else {
+            setMsg('开箱 · 神兵', 1);
+          }
         } else {
           applyDrop(dropFromChest(), c.x);
           setMsg('开箱', 0.5);
@@ -597,13 +608,21 @@ export function createPlay(opts) {
     }
     for (const pr of props) {
       if (!pr.alive) continue;
+      if (pr.requireInside && insideZone !== pr.requireInside) continue;
       if (Math.abs(pr.x - attacker.x) < reach + 8 && Math.abs(pr.y - attacker.y) < 30) {
         pr.hp -= dealt;
         hit = true;
         if (pr.hp <= 0) {
           pr.alive = false;
           if (pr.drop) addBagItemTo(attacker, pr.drop, 1);
-          setMsg(`破${pr.label}`, 0.6);
+          if (pr.lion === 'correct') {
+            if (p.runFlags) p.runFlags.ice_lion_ok = true;
+            setMsg('石狮正确 · 可开青缸箱', 1.5);
+          } else if (pr.lion === 'wrong') {
+            setMsg('石狮不对 · 再找', 0.9);
+          } else {
+            setMsg(`破${pr.label}`, 0.6);
+          }
         }
       }
     }
@@ -845,6 +864,7 @@ export function createPlay(opts) {
     for (const c of chests) {
       if (c.open) continue;
       if (c.requireInside && insideZone !== c.requireInside) continue;
+      if (c.requireFlag && !(p.runFlags && p.runFlags[c.requireFlag])) continue;
       for (const f of livingFighters()) {
         if (Math.abs(c.x - f.x) < 12) {
           c.open = true;
@@ -1083,9 +1103,10 @@ export function createPlay(opts) {
     // props
     for (const pr of props) {
       if (!pr.alive) continue;
-      ctx.fillStyle = '#406080';
+      if (pr.requireInside && insideZone !== pr.requireInside) continue;
+      ctx.fillStyle = pr.lion === 'correct' ? '#6080a0' : '#406080';
       ctx.fillRect(pr.x - 10, pr.y, 20, 14);
-      drawText(ctx, pr.label, pr.x, pr.y - 10, 6, '#80a0c0', 'center');
+      drawText(ctx, pr.label || '物', pr.x, pr.y - 10, 6, '#80a0c0', 'center');
     }
     // chests
     for (const c of chests) {
