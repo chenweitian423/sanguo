@@ -60,7 +60,7 @@ export function preloadHeroArt(ids) {
 const FEET = 28;
 
 /** In-play PNG hero height (px). */
-const HERO_PNG_H = 36;
+const HERO_PNG_H = 56;
 
 /** Per-hero palette + weapon silhouette kind. */
 export const HERO_LOOK = {
